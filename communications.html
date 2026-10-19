@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="GMS — Communications Management. Create, search, and manage incoming and outgoing communication records." />
+  <title>GMS — Communications</title>
+
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="communications.css" />
+
+  <!-- Supabase JS SDK (UMD) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+  <!-- Animated background -->
+  <div class="bg-gradient" aria-hidden="true"></div>
+
+  <!-- Loading overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- ── Delete Confirmation Modal ── -->
+  <div class="modal-backdrop" id="delete-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-box">
+      <h4 id="modal-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        Confirm Deletion
+      </h4>
+      <p id="modal-message">Are you sure you want to delete this communication record? This action cannot be undone.</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="modal-cancel-btn">Cancel</button>
+        <button class="btn btn-danger" id="modal-confirm-btn">
+          <span class="btn-text">Delete</span>
+          <span class="btn-spinner"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Page Shell (hidden until auth check passes) ── -->
+  <div class="dashboard-wrapper" id="page-shell" style="display:none;">
+
+    <!-- ── Top Navigation ── -->
+    <nav class="top-nav" role="navigation" aria-label="Main navigation">
+      <div class="nav-brand">
+        <a href="dashboard.html" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit;">
+          <div class="nav-logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </div>
+          <span>GMS</span>
+        </a>
+      </div>
+
+      <div class="nav-links">
+        <a href="dashboard.html" class="nav-link">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          <span>Dashboard</span>
+        </a>
+        <a href="e-office-files.html" class="nav-link">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          <span>E-Office Files</span>
+        </a>
+        <a href="communications.html" class="nav-link active">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>Communications</span>
+        </a>
+      </div>
+
+      <div class="nav-actions">
+        <div class="nav-user">
+          <div class="nav-avatar" id="nav-avatar" aria-hidden="true">?</div>
+          <div class="nav-user-info">
+            <span class="nav-user-name" id="nav-user-name">—</span>
+            <span class="nav-user-role" id="nav-user-role">—</span>
+          </div>
+        </div>
+        <button class="btn btn-danger-ghost" id="logout-btn" aria-label="Sign out">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          <span>Logout</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- ── Main Content ── -->
+    <main class="dashboard-content" style="max-width:1440px;">
+
+      <!-- Page Header -->
+      <div class="page-header">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          Communications Management
+        </h2>
+      </div>
+
+      <!-- ════════════════════════════════════════════
+           SECTION 1 — Communication Form
+           ════════════════════════════════════════════ -->
+      <section class="form-card" id="form-section" aria-label="Communication form">
+        <h3 id="form-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          <span id="form-title-text">New Communication Record</span>
+        </h3>
+
+        <form id="comm-form" novalidate autocomplete="off">
+          <input type="hidden" id="edit-uuid" value="" />
+          <input type="hidden" id="e-office-uuid" value="" />
+
+          <div class="comm-form-grid">
+
+            <!-- 1. Select E-Office File -->
+            <div class="form-group col-12">
+              <label for="select-eoffice-file">
+                1. Select E-Office File <span style="color:var(--clr-danger);">*</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <select id="select-eoffice-file" required aria-describedby="eoffice-file-error">
+                  <option value="">-- Choose an E-Office File --</option>
+                </select>
+              </div>
+              <p id="eoffice-file-error" class="field-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>Please select an E-Office file</span>
+              </p>
+            </div>
+
+            <!-- 2. E-Office File Number (read-only) -->
+            <div class="form-group col-6">
+              <label for="eoffice-file-number">
+                2. E-Office File Number <span class="readonly-tag">Read Only</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                <input type="text" id="eoffice-file-number" class="input-readonly" readonly
+                       placeholder="Auto-populated from selected file" />
+              </div>
+            </div>
+
+            <!-- 3. E-Office Computer Number (read-only) -->
+            <div class="form-group col-6">
+              <label for="eoffice-computer-number">
+                3. E-Office Computer Number <span class="readonly-tag">Read Only</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                  <line x1="8" y1="21" x2="16" y2="21"/>
+                  <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+                <input type="text" id="eoffice-computer-number" class="input-readonly" readonly
+                       placeholder="Auto-populated from selected file" />
+              </div>
+            </div>
+
+            <!-- 4. Communication Number -->
+            <div class="form-group col-6">
+              <label for="communication-number">
+                4. Communication Number <span style="color:var(--clr-danger);">*</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="4" y1="9" x2="20" y2="9"/>
+                  <line x1="4" y1="15" x2="20" y2="15"/>
+                  <line x1="10" y1="3" x2="8" y2="21"/>
+                  <line x1="16" y1="3" x2="14" y2="21"/>
+                </svg>
+                <input type="text" id="communication-number" placeholder="e.g. LGS-1(GR)26/4550"
+                       required aria-describedby="comm-number-error" />
+              </div>
+              <p id="comm-number-error" class="field-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>Communication number is required</span>
+              </p>
+            </div>
+
+            <!-- 5. Communication Date -->
+            <div class="form-group col-6">
+              <label for="communication-date">
+                5. Communication Date <span style="color:var(--clr-danger);">*</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/>
+                  <line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                <input type="date" id="communication-date" required aria-describedby="comm-date-error" />
+              </div>
+              <p id="comm-date-error" class="field-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>Communication date is required</span>
+              </p>
+            </div>
+
+            <!-- 6. Communication Year (read-only) -->
+            <div class="form-group col-4">
+              <label for="communication-year">
+                6. Communication Year <span class="readonly-tag">Derived</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                <input type="text" id="communication-year" class="input-readonly" readonly placeholder="Auto from Date" />
+              </div>
+            </div>
+
+            <!-- 7. Communication Month (read-only) -->
+            <div class="form-group col-4">
+              <label for="communication-month">
+                7. Communication Month <span class="readonly-tag">Derived</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                <input type="text" id="communication-month" class="input-readonly" readonly placeholder="Auto from Date" />
+              </div>
+            </div>
+
+            <!-- 8. E-Office Receipt Number -->
+            <div class="form-group col-4">
+              <label for="eoffice-receipt-number">
+                8. E-Office Receipt Number
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <input type="text" id="eoffice-receipt-number" placeholder="e.g. eR-2026-904" />
+              </div>
+            </div>
+
+            <!-- 9. Communication Type -->
+            <div class="form-group col-6">
+              <label for="communication-type">
+                9. Communication Type <span style="color:var(--clr-danger);">*</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                  <polyline points="2 17 12 22 22 17"/>
+                  <polyline points="2 12 12 17 22 12"/>
+                </svg>
+                <select id="communication-type" required>
+                  <option value="Letter" selected>Letter</option>
+                  <option value="Office Memorandum (OM)">Office Memorandum (OM)</option>
+                  <option value="Email">Email</option>
+                  <option value="U.O. Note">U.O. Note</option>
+                  <option value="D.O. Letter">D.O. Letter</option>
+                  <option value="Notification">Notification</option>
+                  <option value="Circular">Circular</option>
+                  <option value="Endorsement">Endorsement</option>
+                  <option value="Speed Post">Speed Post</option>
+                  <option value="In Person">In Person</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 10. Received From (Dropdown from public.Departments) -->
+            <div class="form-group col-6">
+              <label for="communication-received-from">
+                10. Received From <span style="color:var(--clr-danger);">*</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                  <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+                <select id="communication-received-from" required aria-describedby="received-from-error">
+                  <option value="">-- Loading Departments… --</option>
+                </select>
+              </div>
+              <p id="received-from-error" class="field-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>Please select the receiving department</span>
+              </p>
+            </div>
+
+            <!-- 11. Sender Name -->
+            <div class="form-group col-4">
+              <label for="communication-sender-name">
+                11. Sender Name
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <input type="text" id="communication-sender-name" placeholder="e.g. Sh. Vikas Sharma" />
+              </div>
+            </div>
+
+            <!-- 12. Sender Designation -->
+            <div class="form-group col-4">
+              <label for="communication-sender-designation">
+                12. Sender Designation
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                  <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+                </svg>
+                <input type="text" id="communication-sender-designation" placeholder="e.g. Deputy Secretary" />
+              </div>
+            </div>
+
+            <!-- 14. Total Representations (Moved next to sender for clean 3-col layout) -->
+            <div class="form-group col-4">
+              <label for="total-representations">
+                14. Total Representations
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <input type="number" id="total-representations" min="0" value="0" placeholder="0" />
+              </div>
+            </div>
+
+            <!-- 13. Communication Subject (Full width) -->
+            <div class="form-group col-12">
+              <label for="communication-subject">
+                13. Communication Subject <span style="color:var(--clr-danger);">*</span>
+              </label>
+              <div class="input-wrapper textarea-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="17" y1="10" x2="3" y2="10"/>
+                  <line x1="21" y1="6" x2="3" y2="6"/>
+                  <line x1="21" y1="14" x2="3" y2="14"/>
+                  <line x1="17" y1="18" x2="3" y2="18"/>
+                </svg>
+                <textarea id="communication-subject" placeholder="Enter subject of communication" rows="3" required
+                          aria-describedby="comm-subject-error"></textarea>
+              </div>
+              <p id="comm-subject-error" class="field-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>Communication subject is required</span>
+              </p>
+            </div>
+
+          </div>
+
+          <!-- Form Buttons -->
+          <div class="form-actions">
+            <button type="submit" id="submit-btn" class="btn btn-primary">
+              <span class="btn-text" id="submit-btn-text">Create</span>
+              <span class="btn-spinner"></span>
+            </button>
+            <button type="button" id="cancel-btn" class="btn btn-ghost">Cancel</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- ════════════════════════════════════════════
+           SECTION 2 — Communications Data Table
+           ════════════════════════════════════════════ -->
+      <section class="table-card" aria-label="Communications data table">
+        <div class="table-card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"/>
+              <rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/>
+              <rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            Communications Records
+          </h3>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="table-toolbar">
+          <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="search-input" placeholder="Search by number, subject, file, sender…" aria-label="Search records" />
+          </div>
+          <span class="record-count" id="record-count"></span>
+          <button class="btn-icon" id="refresh-btn" title="Refresh data" aria-label="Refresh data">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Table (18 columns) -->
+        <div class="table-wrap">
+          <table class="data-table" id="data-table">
+            <thead>
+              <tr>
+                <th style="min-width:55px;">S. No.</th>
+                <th>E-Office File Number</th>
+                <th>E-Office Computer Number</th>
+                <th>Communication Number</th>
+                <th>Communication Date</th>
+                <th>Communication Year</th>
+                <th>Communication Month</th>
+                <th>E-Office Receipt Number</th>
+                <th>Communication Type</th>
+                <th>Received From</th>
+                <th>Sender Name</th>
+                <th>Sender Designation</th>
+                <th style="min-width:200px;">Communication Subject</th>
+                <th>Total Representations</th>
+                <th>Grievances Portal</th>
+                <th>Departmental Channels</th>
+                <th>Non Actionable</th>
+                <th style="min-width:90px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="table-body">
+              <!-- Rows injected dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination"></div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Scripts -->
+  <script src="config.js"></script>
+  <script src="ui.js"></script>
+  <script src="auth.js"></script>
+  <script src="communications.js"></script>
+</body>
+</html>
