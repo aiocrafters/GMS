@@ -244,7 +244,7 @@
         .from('e_office_files')
         .select('uuid, e_office_file_number, e_office_computer_number, e_office_file_subject')
         .eq('is_deleted', false)
-        .order('e_office_file_number', { ascending: true })
+        .order('e_office_computer_number', { ascending: false })
         .limit(3500);
 
       if (error) {
@@ -253,15 +253,34 @@
         return;
       }
 
+      // Sort in descending order (highest to lowest) based on e_office_computer_number
+      // with numeric-aware collation so numbers like 101, 100, 99 appear in correct numerical order
+      const files = (data || []).slice().sort((a, b) => {
+        const strA = String(a.e_office_computer_number || '').trim();
+        const strB = String(b.e_office_computer_number || '').trim();
+
+        const numA = Number(strA);
+        const numB = Number(strB);
+        const isNumA = !isNaN(numA) && strA !== '';
+        const isNumB = !isNaN(numB) && strB !== '';
+
+        if (isNumA && isNumB) {
+          return numB - numA; // Descending numerical order (highest first)
+        }
+
+        // Natural numeric collation fallback for alphanumeric strings
+        return strB.localeCompare(strA, undefined, { numeric: true, sensitivity: 'base' });
+      });
+
       eofficeFilesMap.clear();
       let optionsHtml = '<option value="">-- Choose an E-Office File --</option>';
 
-      (data || []).forEach(f => {
+      files.forEach(f => {
         eofficeFilesMap.set(f.uuid, f);
-        const fileNum = f.e_office_file_number || 'No File #';
         const compNum = f.e_office_computer_number || 'No Comp #';
+        const fileNum = f.e_office_file_number || 'No File #';
         const subject = f.e_office_file_subject ? ` — ${f.e_office_file_subject.slice(0, 50)}` : '';
-        optionsHtml += `<option value="${f.uuid}">${escapeHtml(fileNum)} (${escapeHtml(compNum)})${escapeHtml(subject)}</option>`;
+        optionsHtml += `<option value="${f.uuid}">${escapeHtml(compNum)} | ${escapeHtml(fileNum)}${escapeHtml(subject)}</option>`;
       });
 
       selectEofficeFile.innerHTML = optionsHtml;
