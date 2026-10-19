@@ -34,7 +34,7 @@
     archive: { page: 0, search: '', length: 20 }
   };
 
-  // Map DataTables column index (0-18) to Supabase table column names
+  // Map DataTables column index (0-12) to Supabase table column names
   const COLUMN_DB_MAP = [
     'created_at',                             // 0: S. No.
     'e_office_file_number',                   // 1: E-Office File Number
@@ -43,18 +43,12 @@
     'communication_date',                     // 4: Communication Date
     'communication_year',                     // 5: Communication Year
     'communication_month',                    // 6: Communication Month
-    'communication_eoffice_receipt_number',   // 7: E-Office Receipt Number
-    'communication_type',                     // 8: Communication Type
-    'communication_received_from',            // 9: Received From
-    'communication_sender_name',              // 10: Sender Name
-    'communication_sender_designation',       // 11: Sender Designation
-    'communication_subject',                  // 12: Communication Subject
-    'total_representations',                  // 13: Total Representations
-    'grievances_portal',                      // 14: Grievances Portal
-    'departmental_channels',                  // 15: Departmental Channels
-    'non_actionable',                         // 16: Non Actionable
-    'total_representations',                  // 17: Pending (fallback sort)
-    'created_at'                              // 18: Actions (fallback sort)
+    'total_representations',                  // 7: Total Representations
+    'grievances_portal',                      // 8: Grievances Portal
+    'departmental_channels',                  // 9: Departmental Channels
+    'non_actionable',                         // 10: Non Actionable
+    'total_representations',                  // 11: Pending (fallback sort)
+    'created_at'                              // 12: Actions (fallback sort)
   ];
 
   /* ── DOM refs ── */
@@ -646,8 +640,8 @@
       },
       columnDefs: [
         { targets: 0, orderable: false, searchable: false, width: '55px' },
-        { targets: 17, orderable: false }, // Pending
-        { targets: 18, orderable: false, searchable: false, width: '90px' } // Actions
+        { targets: 11, orderable: false }, // Pending
+        { targets: 12, orderable: false, searchable: false, width: '90px' } // Actions
       ],
       ajax: async function (data, callback, settings) {
         try {
@@ -673,7 +667,7 @@
             const ascending = (ord.dir === 'asc');
             query = query.order(dbCol, { ascending });
             if (dbCol !== 'created_at') {
-              query = query.order('created_at', { ascending: false });
+               query = query.order('created_at', { ascending: false });
             }
           } else {
             query = query.order('created_at', { ascending: false });
@@ -700,7 +694,7 @@
 
           currentRecords = records || [];
 
-          // Transform records into 19 column cells
+          // Transform records into 13 column cells
           const rows = currentRecords.map((r, i) => {
             const sno = start + i + 1;
             const fileNum = `<span style="font-weight:500;">${escapeHtml(r.e_office_file_number || '—')}</span>`;
@@ -709,12 +703,6 @@
             const commDate = r.communication_date ? formatDateOnly(r.communication_date) : '—';
             const commYear = r.communication_year || '—';
             const commMonth = escapeHtml(r.communication_month || '—');
-            const receiptNum = escapeHtml(r.communication_eoffice_receipt_number || '—');
-            const commType = `<span class="badge badge-type">${escapeHtml(r.communication_type || 'Letter')}</span>`;
-            const receivedFrom = `<span style="display:inline-block;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(r.communication_received_from || '')}">${escapeHtml(r.communication_received_from || '—')}</span>`;
-            const senderName = escapeHtml(r.communication_sender_name || '—');
-            const senderDesig = escapeHtml(r.communication_sender_designation || '—');
-            const subject = `<span class="subject-col" title="${escapeHtml(r.communication_subject || '')}">${escapeHtml(r.communication_subject || '—')}</span>`;
 
             const totalRep = Number(r.total_representations) || 0;
             const grievPortal = Number(r.grievances_portal) || 0;
@@ -756,8 +744,7 @@
 
             return [
               sno, fileNum, compNum, commNum, commDate, commYear, commMonth,
-              receiptNum, commType, receivedFrom, senderName, senderDesig,
-              subject, totalRepBadge, grievPortalBadge, deptChannelsBadge,
+              totalRepBadge, grievPortalBadge, deptChannelsBadge,
               nonActionableBadge, pendingBadge, actionsHtml
             ];
           });
