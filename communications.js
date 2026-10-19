@@ -685,10 +685,11 @@
       const senderDesig = escapeHtml(r.communication_sender_designation || '—');
       const subject = escapeHtml(r.communication_subject || '—');
 
-      const totalRep = r.total_representations || 0;
-      const grievPortal = r.grievances_portal || 0;
-      const deptChannels = r.departmental_channels || 0;
-      const nonActionable = r.non_actionable || 0;
+      const totalRep = Number(r.total_representations) || 0;
+      const grievPortal = Number(r.grievances_portal) || 0;
+      const deptChannels = Number(r.departmental_channels) || 0;
+      const nonActionable = Number(r.non_actionable) || 0;
+      const pending = totalRep - (grievPortal + deptChannels + nonActionable);
 
       // Action buttons: Edit & Delete for Active, Restore for Archive (NO permanent delete)
       const actionsHtml = currentView === 'active'
@@ -736,6 +737,7 @@
           <td><span class="badge badge-accent">${grievPortal}</span></td>
           <td><span class="badge badge-purple">${deptChannels}</span></td>
           <td><span class="badge badge-muted">${nonActionable}</span></td>
+          <td><span class="badge badge-pending">${pending}</span></td>
           <td>
             <div class="action-btns">
               ${actionsHtml}
@@ -759,7 +761,7 @@
   function renderTableLoading() {
     tableBody.innerHTML = `
       <tr class="table-status-row">
-        <td colspan="18">
+        <td colspan="19">
           <div class="inline-spinner"></div>
           Loading ${currentView === 'active' ? 'active' : 'archived'} communications…
         </td>
@@ -770,7 +772,7 @@
   function renderTableEmpty(message) {
     tableBody.innerHTML = `
       <tr class="table-status-row">
-        <td colspan="18">${escapeHtml(message)}</td>
+        <td colspan="19">${escapeHtml(message)}</td>
       </tr>`;
   }
 
