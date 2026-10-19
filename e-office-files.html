@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="GMS — E-Office Files management. Add, search, edit, and delete E-Office file records." />
+  <title>GMS — E-Office Files</title>
+
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="e-office-files.css" />
+
+  <!-- Supabase JS SDK (UMD) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+
+  <!-- Animated background -->
+  <div class="bg-gradient" aria-hidden="true"></div>
+
+  <!-- Loading overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- ── Delete Confirmation Modal ── -->
+  <div class="modal-backdrop" id="delete-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-box">
+      <h4 id="modal-title">
+        <svg id="modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <span id="modal-title-text">Confirm Deletion</span>
+      </h4>
+      <p id="modal-message">Are you sure you want to delete this record? It will be removed from the active list.</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="modal-cancel-btn">Cancel</button>
+        <button class="btn btn-danger" id="modal-confirm-btn">
+          <span class="btn-text" id="modal-confirm-text">Delete</span>
+          <span class="btn-spinner"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Page Shell (hidden until auth check passes) ── -->
+  <div class="dashboard-wrapper" id="page-shell" style="display:none;">
+
+    <!-- ── Top Navigation (same pattern as dashboard) ── -->
+    <nav class="top-nav" role="navigation" aria-label="Main navigation">
+      <div class="nav-brand">
+        <a href="dashboard.html" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit;">
+          <div class="nav-logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </div>
+          <span>GMS</span>
+        </a>
+      </div>
+
+      <div class="nav-links">
+        <a href="dashboard.html" class="nav-link">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          <span>Dashboard</span>
+        </a>
+        <a href="e-office-files.html" class="nav-link active">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          <span>E-Office Files</span>
+        </a>
+      </div>
+
+      <div class="nav-actions">
+        <div class="nav-user">
+          <div class="nav-avatar" id="nav-avatar" aria-hidden="true">?</div>
+          <div class="nav-user-info">
+            <span class="nav-user-name" id="nav-user-name">—</span>
+            <span class="nav-user-role" id="nav-user-role">—</span>
+          </div>
+        </div>
+        <button class="btn btn-danger-ghost" id="logout-btn" aria-label="Sign out">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          <span>Logout</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- ── Main Content ── -->
+    <main class="dashboard-content" style="max-width:1400px;">
+
+      <!-- Page Header -->
+      <div class="page-header">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          E-Office Files
+        </h2>
+      </div>
+
+      <!-- ════════════════════════════════════════════
+           SECTION 1 — Create / Edit Form
+           ════════════════════════════════════════════ -->
+      <section class="form-card" id="form-section" aria-label="E-Office File form">
+        <h3 id="form-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          <span id="form-title-text">Add New Record</span>
+        </h3>
+
+        <form id="efile-form" novalidate autocomplete="off">
+          <!-- Hidden field for edit mode -->
+          <input type="hidden" id="edit-uuid" value="" />
+
+          <div class="form-row">
+            <!-- Computer Number -->
+            <div class="form-group">
+              <label for="computer-number">E-Office Computer Number <span style="color:var(--clr-danger);">*</span></label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                  <line x1="8" y1="21" x2="16" y2="21"/>
+                  <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+                <input type="text" id="computer-number" placeholder="e.g. GAD/2025/001"
+                       required aria-describedby="computer-number-error" />
+              </div>
+              <p id="computer-number-error" class="field-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>Computer number is required</span>
+              </p>
+            </div>
+
+            <!-- File Number -->
+            <div class="form-group">
+              <label for="file-number">E-Office File Number <span style="color:var(--clr-danger);">*</span></label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                  <polyline points="13 2 13 9 20 9"/>
+                </svg>
+                <input type="text" id="file-number" placeholder="e.g. GAD-01/04/2025-eFO"
+                       required aria-describedby="file-number-error" />
+              </div>
+              <p id="file-number-error" class="field-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>File number is required</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- Subject (full width) -->
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label for="file-subject">E-Office File Subject</label>
+              <div class="input-wrapper textarea-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="17" y1="10" x2="3" y2="10"/>
+                  <line x1="21" y1="6" x2="3" y2="6"/>
+                  <line x1="21" y1="14" x2="3" y2="14"/>
+                  <line x1="17" y1="18" x2="3" y2="18"/>
+                </svg>
+                <textarea id="file-subject" placeholder="Enter the subject of the file (optional)" rows="3"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Form buttons -->
+          <div class="form-actions">
+            <button type="submit" id="submit-btn" class="btn btn-primary">
+              <span class="btn-text" id="submit-btn-text">Create</span>
+              <span class="btn-spinner"></span>
+            </button>
+            <button type="button" id="cancel-btn" class="btn btn-ghost">Cancel</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- ════════════════════════════════════════════
+           SECTION 2 — Data Table
+           ════════════════════════════════════════════ -->
+      <section class="table-card" aria-label="E-Office Files data">
+        
+        <!-- Header with Active / Archive Tabs -->
+        <div class="table-card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"/>
+              <rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/>
+              <rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            <span id="table-title-text">Active Records</span>
+          </h3>
+
+          <div class="list-tabs" role="tablist" aria-label="Record status filter">
+            <button class="list-tab active" id="tab-active" role="tab" aria-selected="true" data-view="active">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+              <span>Active List</span>
+              <span class="tab-badge" id="active-badge">0</span>
+            </button>
+            <button class="list-tab" id="tab-archive" role="tab" aria-selected="false" data-view="archive">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="21 8 21 21 3 21 3 8"/>
+                <rect x="1" y="3" width="22" height="5"/>
+                <line x1="10" y1="12" x2="14" y2="12"/>
+              </svg>
+              <span>Archive List</span>
+              <span class="tab-badge" id="archive-badge">0</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="table-toolbar">
+          <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="search-input" placeholder="Search by number or subject…" aria-label="Search records" />
+          </div>
+          <span class="record-count" id="record-count"></span>
+          <button class="btn-icon" id="refresh-btn" title="Refresh data" aria-label="Refresh data">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Table -->
+        <div class="table-wrap">
+          <table class="data-table" id="data-table">
+            <thead>
+              <tr>
+                <th class="sno-cell">S.No.</th>
+                <th>Computer Number</th>
+                <th>File Number</th>
+                <th>Subject</th>
+                <th id="col-header-date">Created At</th>
+                <th id="col-header-user">Created By</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="table-body">
+              <!-- Rows injected by JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination"></div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Scripts (order matters) -->
+  <script src="config.js"></script>
+  <script src="ui.js"></script>
+  <script src="auth.js"></script>
+  <script src="e-office-files.js"></script>
+</body>
+</html>
