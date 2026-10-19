@@ -241,9 +241,11 @@
   color: var(--clr-success);
 }
 
-.action-btn.restore-btn:hover {
-  background: rgba(52, 211, 153, 0.12);
-  border-color: rgba(52, 211, 153, 0.35);
+.table-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 /* Toolbar (search + count + refresh) */
@@ -501,9 +503,218 @@
   cursor: not-allowed;
 }
 
-.page-btn svg {
-  width: 16px;
-  height: 16px;
+/* ═════════════════════════════════════════════════════════════════════
+ *  DATATABLES DARK THEME & STYLING OVERRIDES
+ * ═════════════════════════════════════════════════════════════════════ */
+.dt-container {
+  color: var(--clr-text);
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  padding: 8px 0;
+}
+
+.dt-container .dt-layout-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.dt-container .dt-layout-table {
+  display: block;
+  padding: 0 !important;
+  overflow-x: auto;
+}
+
+/* Length menu */
+.dt-container .dt-length {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--clr-text-muted);
+  font-size: 0.84rem;
+}
+
+.dt-container .dt-length select.dt-input {
+  background: var(--clr-surface);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  color: var(--clr-text);
+  padding: 6px 12px;
+  font-size: 0.86rem;
+  font-family: var(--font-sans);
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.dt-container .dt-length select.dt-input:focus {
+  border-color: var(--clr-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+}
+
+.dt-container .dt-length select.dt-input option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+/* Search input */
+.dt-container .dt-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--clr-text-muted);
+  font-size: 0.84rem;
+}
+
+.dt-container .dt-search input.dt-input {
+  background: var(--clr-surface);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  color: var(--clr-text);
+  padding: 8px 14px;
+  font-size: 0.86rem;
+  font-family: var(--font-sans);
+  outline: none;
+  min-width: 260px;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.dt-container .dt-search input.dt-input:focus {
+  border-color: var(--clr-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+  background: rgba(15, 23, 42, 0.85);
+}
+
+.dt-container .dt-search input.dt-input::placeholder {
+  color: var(--clr-text-dim);
+}
+
+/* Info text */
+.dt-container .dt-info {
+  color: var(--clr-text-dim);
+  font-size: 0.84rem;
+  font-weight: 500;
+  padding: 4px 0;
+}
+
+/* Paging buttons */
+.dt-container .dt-paging {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.dt-container .dt-paging .dt-paging-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  padding: 0 10px !important;
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid var(--clr-border) !important;
+  background: transparent !important;
+  color: var(--clr-text-muted) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 0.84rem !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all var(--transition-fast) !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+}
+
+.dt-container .dt-paging .dt-paging-button:hover:not(.disabled):not(.current) {
+  background: var(--clr-surface) !important;
+  border-color: var(--clr-border-hover) !important;
+  color: var(--clr-text) !important;
+}
+
+.dt-container .dt-paging .dt-paging-button.current {
+  background: var(--clr-primary) !important;
+  border-color: var(--clr-primary) !important;
+  color: #fff !important;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.4) !important;
+}
+
+.dt-container .dt-paging .dt-paging-button.disabled {
+  opacity: 0.35 !important;
+  cursor: not-allowed !important;
+}
+
+/* DataTables Table Overrides */
+table.dataTable {
+  width: 100% !important;
+  margin: 0 !important;
+  border-collapse: collapse !important;
+  color: var(--clr-text) !important;
+  background: transparent !important;
+}
+
+table.dataTable thead th {
+  background: rgba(15, 23, 42, 0.9) !important;
+  color: var(--clr-text-muted) !important;
+  border-bottom: 1px solid var(--clr-border) !important;
+  padding: 12px 14px !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+}
+
+table.dataTable thead th.dt-orderable-asc:hover,
+table.dataTable thead th.dt-orderable-desc:hover {
+  background: rgba(99, 102, 241, 0.12) !important;
+  color: var(--clr-text) !important;
+}
+
+table.dataTable thead th .dt-column-order {
+  opacity: 0.6;
+}
+
+table.dataTable thead th.dt-ordering-asc .dt-column-order,
+table.dataTable thead th.dt-ordering-desc .dt-column-order {
+  opacity: 1;
+  color: var(--clr-primary);
+}
+
+table.dataTable tbody td {
+  padding: 12px 14px !important;
+  border-bottom: 1px solid var(--clr-border) !important;
+  color: var(--clr-text) !important;
+  font-size: 0.86rem !important;
+  white-space: nowrap !important;
+  background: transparent !important;
+}
+
+table.dataTable tbody tr {
+  background: transparent !important;
+  transition: background-color var(--transition-fast);
+}
+
+table.dataTable tbody tr:hover td {
+  background: rgba(99, 102, 241, 0.07) !important;
+}
+
+/* Processing indicator */
+.dt-container .dt-processing {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(10, 14, 26, 0.92) !important;
+  border: 1px solid var(--clr-border) !important;
+  border-radius: var(--radius-md) !important;
+  color: var(--clr-text) !important;
+  padding: 16px 24px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
+  z-index: 100;
+  backdrop-filter: blur(8px);
 }
 
 /* ── Confirm Modal ── */

@@ -1,25 +1,38 @@
 /* =====================================================================
  *  e-office-files.js — E-Office Files page behaviour
- *  Handles CRUD operations, Active / Archive lists, search, pagination.
+ *  Handles CRUD operations, Active / Archive lists, search, pagination
+ *  powered by DataTables with Supabase server-side processing.
  * ===================================================================== */
 
 (function () {
   'use strict';
 
-  /* ── Constants ── */
-  const PAGE_SIZE = 20;
+  /* ── Column Database Field Mapping ── */
+  const COLUMN_DB_MAP = {
+    0: 'created_at',               // S.No.
+    1: 'e_office_computer_number', // Computer Number
+    2: 'e_office_file_number',     // File Number
+    3: 'e_office_file_subject',    // Subject
+    4: 'created_at',               // Date (created_at or deleted_at)
+    5: 'created_by',               // User (created_by or deleted_by)
+    6: 'created_at'                // Actions
+  };
 
   /* ── State ── */
   let currentUser = null;
   let currentProfile = null;
   let currentView = 'active';        // 'active' | 'archive'
-  let allActiveRecords = [];         // records with is_deleted === false
-  let allArchivedRecords = [];       // records with is_deleted === true
-  let filteredRecords = [];          // search-filtered subset of active view
-  let currentPage = 1;
+  let dataTableInstance = null;
+  let currentRecords = [];           // current page records
   let isEditMode = false;
   let modalTarget = null;            // uuid of target record
   let modalAction = 'delete';        // 'delete' | 'restore'
+
+  // Per-tab state for search and pagination preservation
+  const listState = {
+    active: { search: '', page: 0, length: 20 },
+    archive: { search: '', page: 0, length: 20 }
+  };
 
   /* ── DOM refs ── */
   const pageShell       = document.getElementById('page-shell');
@@ -47,12 +60,8 @@
   const cancelBtn       = document.getElementById('cancel-btn');
   const formTitle       = document.getElementById('form-title-text');
 
-  // Table & Toolbar
-  const searchInput     = document.getElementById('search-input');
+  // Table controls
   const refreshBtn      = document.getElementById('refresh-btn');
-  const tableBody       = document.getElementById('table-body');
-  const recordCountEl   = document.getElementById('record-count');
-  const paginationEl    = document.getElementById('pagination');
 
   // Modal elements
   const actionModal     = document.getElementById('delete-modal');
@@ -84,11 +93,17 @@
       } catch (_) { /* use auth data */ }
 
       populateNav();
+      setupFormListeners();
       setupTabListeners();
+      setupTableActionListeners();
+      setupModalListeners();
+
       pageShell.style.display = 'flex';
       hideLoading();
 
-      await loadRecords();
+      // Initialize DataTables with server-side processing
+      initDataTable();
+      await updateBadgeCounts();
 
     } catch (err) {
       console.error('Init error:', err);
@@ -143,11 +158,20 @@
     }
   }
 
-  function switchView(view) {
-    if (currentView === view) return;
-    currentView = view;
+  function switchView(newView) {
+    if (currentView === newView) return;
 
-    if (view === 'active') {
+    // 1. Preserve current tab's state
+    if (dataTableInstance) {
+      listState[currentView].search = dataTableInstance.search();
+      listState[currentView].page = dataTableInstance.page();
+      listState[currentView].length = dataTableInstance.page.len();
+    }
+
+    // 2. Switch tab
+    currentView = newView;
+
+    if (newView === 'active') {
       tabActive.classList.add('active');
       tabActive.setAttribute('aria-selected', 'true');
       tabArchive.classList.remove('active');
@@ -162,38 +186,66 @@
       tabActive.classList.remove('active');
       tabActive.setAttribute('aria-selected', 'false');
 
-      if (tableTitleText) tableTitleText.textContent = 'Archived Records';
+      if (tableTitleText) tableTitleText.textContent = 'Archive Records';
       if (colHeaderDate) colHeaderDate.textContent = 'Archived At';
       if (colHeaderUser) colHeaderUser.textContent = 'Archived By';
     }
 
-    currentPage = 1;
-    applySearchFilter();
+    // 3. Restore new tab's search query and page state
+    if (dataTableInstance) {
+      const saved = listState[newView];
+      dataTableInstance.search(saved.search || '');
+      if (saved.length) dataTableInstance.page.len(saved.length);
+
+      dataTableInstance.ajax.reload(() => {
+        if (saved.page) {
+          dataTableInstance.page(saved.page).draw('page');
+        }
+      }, false);
+    }
+  }
+
+  async function updateBadgeCounts() {
+    try {
+      const client = getSupabaseClient();
+      const [activeRes, archiveRes] = await Promise.all([
+        client.from('e_office_files').select('uuid', { count: 'exact', head: true }).eq('is_deleted', false),
+        client.from('e_office_files').select('uuid', { count: 'exact', head: true }).eq('is_deleted', true)
+      ]);
+
+      const activeCount = activeRes.count || 0;
+      const archiveCount = archiveRes.count || 0;
+
+      if (activeBadge) activeBadge.textContent = activeCount.toLocaleString();
+      if (archiveBadge) archiveBadge.textContent = archiveCount.toLocaleString();
+
+    } catch (err) {
+      console.error('Error fetching badge counts:', err);
+    }
   }
 
 
   /* ═════════════════════════════════════════════════════════════════════
-   *  FORM — Create / Edit
+   *  FORM VALIDATION & SUBMIT
    * ═════════════════════════════════════════════════════════════════════ */
+  function setupFormListeners() {
+    compNumInput.addEventListener('input', () => {
+      compNumInput.classList.remove('invalid');
+      compNumErr.classList.remove('visible');
+    });
 
-  // Real-time validation reset
-  compNumInput.addEventListener('input', () => {
-    compNumInput.classList.remove('invalid');
-    compNumErr.classList.remove('visible');
-  });
-  fileNumInput.addEventListener('input', () => {
-    fileNumInput.classList.remove('invalid');
-    fileNumErr.classList.remove('visible');
-  });
+    fileNumInput.addEventListener('input', () => {
+      fileNumInput.classList.remove('invalid');
+      fileNumErr.classList.remove('visible');
+    });
 
-  // Cancel button
-  cancelBtn.addEventListener('click', resetForm);
+    cancelBtn.addEventListener('click', resetForm);
+    form.addEventListener('submit', handleFormSubmit);
+  }
 
-  // Submit
-  form.addEventListener('submit', async (e) => {
+  async function handleFormSubmit(e) {
     e.preventDefault();
 
-    // Validate
     let valid = true;
     const computerNumber = compNumInput.value.trim();
     const fileNumber     = fileNumInput.value.trim();
@@ -265,264 +317,227 @@
 
     resetForm();
     setFormLoading(false);
-    await loadRecords();
-  });
+
+    if (currentView === 'archive' && !isEditMode) {
+      switchView('active');
+    } else if (dataTableInstance) {
+      dataTableInstance.ajax.reload(null, false);
+    }
+    await updateBadgeCounts();
+  }
 
 
   /* ═════════════════════════════════════════════════════════════════════
-   *  DATA TABLE — Fetch, Render, Search, Paginate
+   *  DATATABLES INITIALIZATION (Built-in Search, Sort, Paging, Page-Length)
    * ═════════════════════════════════════════════════════════════════════ */
-
-  async function loadRecords() {
-    renderTableLoading();
-    refreshBtn.classList.add('spinning');
-
-    try {
-      const client = getSupabaseClient();
-      const { data, error } = await client
-        .from('e_office_files')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        showToast('Failed to load records: ' + error.message, 'error');
-        renderTableEmpty('Error loading records.');
-        refreshBtn.classList.remove('spinning');
-        return;
-      }
-
-      const records = data || [];
-      allActiveRecords = records.filter(r => !r.is_deleted);
-      allArchivedRecords = records.filter(r => !!r.is_deleted);
-
-      // Update badge counts
-      if (activeBadge) activeBadge.textContent = allActiveRecords.length;
-      if (archiveBadge) archiveBadge.textContent = allArchivedRecords.length;
-
-      applySearchFilter();
-
-    } catch (err) {
-      showToast('Network error loading records.', 'error');
-      renderTableEmpty('Network error.');
+  function initDataTable() {
+    if (dataTableInstance) {
+      dataTableInstance.destroy();
+      dataTableInstance = null;
     }
 
-    refreshBtn.classList.remove('spinning');
-  }
-
-  // Refresh button
-  refreshBtn.addEventListener('click', () => loadRecords());
-
-  // Search (debounced)
-  let searchTimer;
-  searchInput.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => {
-      currentPage = 1;
-      applySearchFilter();
-    }, 250);
-  });
-
-  function applySearchFilter() {
-    const sourceRecords = currentView === 'active' ? allActiveRecords : allArchivedRecords;
-    const q = searchInput.value.trim().toLowerCase();
-
-    if (!q) {
-      filteredRecords = [...sourceRecords];
-    } else {
-      filteredRecords = sourceRecords.filter(r =>
-        (r.e_office_computer_number || '').toLowerCase().includes(q) ||
-        (r.e_office_file_number || '').toLowerCase().includes(q) ||
-        (r.e_office_file_subject || '').toLowerCase().includes(q)
-      );
-    }
-
-    // Clamp current page
-    const maxPage = Math.max(1, Math.ceil(filteredRecords.length / PAGE_SIZE));
-    if (currentPage > maxPage) currentPage = maxPage;
-
-    renderTable();
-    renderPagination();
-    updateRecordCount(sourceRecords.length);
-  }
-
-  function renderTable() {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    const pageData = filteredRecords.slice(start, start + PAGE_SIZE);
-
-    if (pageData.length === 0) {
-      const msg = searchInput.value.trim()
-        ? `No ${currentView === 'active' ? 'active' : 'archived'} records match your search.`
-        : `No ${currentView === 'active' ? 'active' : 'archived'} records found.`;
-      renderTableEmpty(msg);
-      return;
-    }
-
-    tableBody.innerHTML = pageData.map((r, i) => {
-      const sno = start + i + 1;
-      const compNum  = escapeHtml(r.e_office_computer_number || '');
-      const fileNum  = escapeHtml(r.e_office_file_number || '');
-      const subject  = escapeHtml(r.e_office_file_subject || '—');
-
-      // Date & User columns depend on active vs archive view
-      const dateVal = currentView === 'active'
-        ? (r.created_at ? formatDate(r.created_at) : '—')
-        : (r.deleted_at ? formatDate(r.deleted_at) : '—');
-
-      const userVal = currentView === 'active'
-        ? escapeHtml(r.created_by || '—')
-        : escapeHtml(r.deleted_by || '—');
-
-      // Action buttons: Edit & Delete for active, Restore for archive
-      const actionsHtml = currentView === 'active'
-        ? `
-          <button class="action-btn edit-btn" title="Edit" aria-label="Edit record" data-uuid="${r.uuid}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-          </button>
-          <button class="action-btn delete-btn" title="Archive / Delete" aria-label="Archive record" data-uuid="${r.uuid}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="3 6 5 6 21 6"/>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-              <line x1="10" y1="11" x2="10" y2="17"/>
-              <line x1="14" y1="11" x2="14" y2="17"/>
-            </svg>
-          </button>
-        `
-        : `
-          <button class="action-btn restore-btn" title="Restore to Active List" aria-label="Restore record" data-uuid="${r.uuid}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="1 4 1 10 7 10"/>
-              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
-            </svg>
-          </button>
-        `;
-
-      return `
-        <tr data-uuid="${r.uuid}">
-          <td class="sno-cell">${sno}</td>
-          <td>${compNum}</td>
-          <td>${fileNum}</td>
-          <td class="subject-cell">${subject}</td>
-          <td>${dateVal}</td>
-          <td>${userVal}</td>
-          <td>
-            <div class="action-btns">
-              ${actionsHtml}
-            </div>
-          </td>
-        </tr>`;
-    }).join('');
-
-    // Attach action handlers
-    tableBody.querySelectorAll('.edit-btn').forEach(btn =>
-      btn.addEventListener('click', () => startEdit(btn.dataset.uuid))
-    );
-    tableBody.querySelectorAll('.delete-btn').forEach(btn =>
-      btn.addEventListener('click', () => confirmDelete(btn.dataset.uuid))
-    );
-    tableBody.querySelectorAll('.restore-btn').forEach(btn =>
-      btn.addEventListener('click', () => confirmRestore(btn.dataset.uuid))
-    );
-  }
-
-  function renderTableLoading() {
-    tableBody.innerHTML = `
-      <tr class="table-status-row">
-        <td colspan="7">
-          <div class="inline-spinner"></div>
-          Loading records…
-        </td>
-      </tr>`;
-    paginationEl.innerHTML = '';
-  }
-
-  function renderTableEmpty(message) {
-    tableBody.innerHTML = `
-      <tr class="table-status-row">
-        <td colspan="7">${escapeHtml(message)}</td>
-      </tr>`;
-  }
-
-  function renderPagination() {
-    const totalPages = Math.max(1, Math.ceil(filteredRecords.length / PAGE_SIZE));
-    if (totalPages <= 1) {
-      paginationEl.innerHTML = '';
-      return;
-    }
-
-    let html = '';
-
-    // Prev
-    html += `<button class="page-btn" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''} aria-label="Previous page">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="15 18 9 12 15 6"/>
-      </svg>
-    </button>`;
-
-    // Page numbers (window of 5)
-    const windowSize = 5;
-    let start = Math.max(1, currentPage - Math.floor(windowSize / 2));
-    let end   = Math.min(totalPages, start + windowSize - 1);
-    if (end - start + 1 < windowSize) start = Math.max(1, end - windowSize + 1);
-
-    if (start > 1) {
-      html += `<button class="page-btn" data-page="1">1</button>`;
-      if (start > 2) html += `<span style="color:var(--clr-text-dim);padding:0 4px;">…</span>`;
-    }
-
-    for (let p = start; p <= end; p++) {
-      html += `<button class="page-btn ${p === currentPage ? 'active' : ''}" data-page="${p}">${p}</button>`;
-    }
-
-    if (end < totalPages) {
-      if (end < totalPages - 1) html += `<span style="color:var(--clr-text-dim);padding:0 4px;">…</span>`;
-      html += `<button class="page-btn" data-page="${totalPages}">${totalPages}</button>`;
-    }
-
-    // Next
-    html += `<button class="page-btn" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''} aria-label="Next page">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="9 18 15 12 9 6"/>
-      </svg>
-    </button>`;
-
-    paginationEl.innerHTML = html;
-
-    paginationEl.querySelectorAll('.page-btn[data-page]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const p = parseInt(btn.dataset.page, 10);
-        if (p >= 1 && p <= totalPages && p !== currentPage) {
-          currentPage = p;
-          renderTable();
-          renderPagination();
-          document.querySelector('.table-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    dataTableInstance = new DataTable('#data-table', {
+      serverSide: true,
+      processing: true,
+      pageLength: 20,
+      lengthMenu: [10, 20, 25, 50, 100],
+      order: [[4, 'desc']], // Default: Created At / Archived At descending
+      scrollX: true,
+      language: {
+        search: '_INPUT_',
+        searchPlaceholder: 'Search by number or subject…',
+        lengthMenu: 'Show _MENU_ entries',
+        info: 'Showing _START_ to _END_ of _TOTAL_ records',
+        infoEmpty: 'No records available',
+        infoFiltered: '(filtered from _MAX_ total)',
+        zeroRecords: `No ${currentView === 'active' ? 'active' : 'archived'} records found`,
+        processing: '<div class="inline-spinner" style="margin:0 auto 8px;"></div>Loading data…',
+        paginate: {
+          first: '«',
+          previous: '‹',
+          next: '›',
+          last: '»'
         }
-      });
+      },
+      columnDefs: [
+        { targets: 0, orderable: false, searchable: false, width: '55px' },
+        { targets: 3, className: 'subject-cell' },
+        { targets: 6, orderable: false, searchable: false, width: '90px' }
+      ],
+      ajax: async function (data, callback, settings) {
+        try {
+          const client = getSupabaseClient();
+          const isArchive = (currentView === 'archive');
+
+          let query = client
+            .from('e_office_files')
+            .select('*', { count: 'exact' })
+            .eq('is_deleted', isArchive);
+
+          // Built-in search
+          const q = (data.search && data.search.value) ? data.search.value.trim() : '';
+          if (q) {
+            query = query.or(`e_office_computer_number.ilike.%${q}%,e_office_file_number.ilike.%${q}%,e_office_file_subject.ilike.%${q}%`);
+          }
+
+          // Built-in sorting
+          if (data.order && data.order.length > 0) {
+            const ord = data.order[0];
+            const colIdx = ord.column !== undefined ? ord.column : ord.col;
+            let dbCol = COLUMN_DB_MAP[colIdx] || 'created_at';
+            if (colIdx === 4) dbCol = isArchive ? 'deleted_at' : 'created_at';
+            if (colIdx === 5) dbCol = isArchive ? 'deleted_by' : 'created_by';
+            const ascending = (ord.dir === 'asc');
+            query = query.order(dbCol, { ascending });
+            if (dbCol !== 'created_at') {
+              query = query.order('created_at', { ascending: false });
+            }
+          } else {
+            const defaultCol = isArchive ? 'deleted_at' : 'created_at';
+            query = query.order(defaultCol, { ascending: false });
+          }
+
+          // Pagination range
+          const start = data.start || 0;
+          const length = data.length || 20;
+          query = query.range(start, start + length - 1);
+
+          const { data: records, count, error } = await query;
+
+          if (error) {
+            console.error('Supabase query error:', error);
+            showToast('Error loading records: ' + error.message, 'error');
+            callback({
+              draw: data.draw,
+              recordsTotal: 0,
+              recordsFiltered: 0,
+              data: []
+            });
+            return;
+          }
+
+          currentRecords = records || [];
+
+          // Transform records into 7 columns
+          const rows = currentRecords.map((r, i) => {
+            const sno = start + i + 1;
+            const compNum = escapeHtml(r.e_office_computer_number || '—');
+            const fileNum = `<span style="font-weight:500;">${escapeHtml(r.e_office_file_number || '—')}</span>`;
+            const subject = escapeHtml(r.e_office_file_subject || '—');
+
+            const dateVal = isArchive
+              ? (r.deleted_at ? formatDate(r.deleted_at) : '—')
+              : (r.created_at ? formatDate(r.created_at) : '—');
+
+            const userVal = isArchive
+              ? escapeHtml(r.deleted_by || '—')
+              : escapeHtml(r.created_by || '—');
+
+            const actionsHtml = !isArchive
+              ? `<div class="action-btns">
+                  <button class="action-btn edit-btn" title="Edit" aria-label="Edit record" data-uuid="${r.uuid}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
+                  <button class="action-btn delete-btn" title="Archive / Delete" aria-label="Delete record" data-uuid="${r.uuid}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      <line x1="10" y1="11" x2="10" y2="17"/>
+                      <line x1="14" y1="11" x2="14" y2="17"/>
+                    </svg>
+                  </button>
+                </div>`
+              : `<div class="action-btns">
+                  <button class="action-btn restore-btn" title="Restore to Active List" aria-label="Restore record" data-uuid="${r.uuid}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="1 4 1 10 7 10"/>
+                      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                    </svg>
+                  </button>
+                </div>`;
+
+            return [
+              sno, compNum, fileNum, subject, dateVal, userVal, actionsHtml
+            ];
+          });
+
+          callback({
+            draw: data.draw,
+            recordsTotal: count || 0,
+            recordsFiltered: count || 0,
+            data: rows
+          });
+
+          // Refresh badge counts in background
+          updateBadgeCounts();
+
+        } catch (err) {
+          console.error('DataTables ajax error:', err);
+          showToast('Network error loading records.', 'error');
+          callback({
+            draw: data.draw,
+            recordsTotal: 0,
+            recordsFiltered: 0,
+            data: []
+          });
+        }
+      }
     });
   }
 
-  function updateRecordCount(total) {
-    const shown = filteredRecords.length;
-    const viewName = currentView === 'active' ? 'active' : 'archived';
-    if (searchInput.value.trim()) {
-      recordCountEl.textContent = `${shown} of ${total} ${viewName} records`;
-    } else {
-      recordCountEl.textContent = `${total} ${viewName} record${total !== 1 ? 's' : ''}`;
-    }
+  function setupTableActionListeners() {
+    // Delegated click listener on #data-table for edit, delete, and restore
+    const tableEl = document.getElementById('data-table');
+    tableEl.addEventListener('click', (e) => {
+      const editBtn = e.target.closest('.edit-btn');
+      if (editBtn) {
+        startEdit(editBtn.dataset.uuid);
+        return;
+      }
+      const deleteBtn = e.target.closest('.delete-btn');
+      if (deleteBtn) {
+        confirmDelete(deleteBtn.dataset.uuid);
+        return;
+      }
+      const restoreBtn = e.target.closest('.restore-btn');
+      if (restoreBtn) {
+        confirmRestore(restoreBtn.dataset.uuid);
+        return;
+      }
+    });
+
+    // Refresh button
+    refreshBtn.addEventListener('click', async () => {
+      refreshBtn.classList.add('spinning');
+      if (dataTableInstance) {
+        dataTableInstance.ajax.reload(() => {
+          refreshBtn.classList.remove('spinning');
+        }, false);
+      } else {
+        refreshBtn.classList.remove('spinning');
+      }
+      await updateBadgeCounts();
+    });
   }
 
 
   /* ═════════════════════════════════════════════════════════════════════
-   *  EDIT
+   *  EDIT RECORD
    * ═════════════════════════════════════════════════════════════════════ */
-  function startEdit(uuid) {
-    const record = allActiveRecords.find(r => r.uuid === uuid);
-    if (!record) return;
+  async function startEdit(uuid) {
+    let record = currentRecords.find(r => r.uuid === uuid);
+    if (!record) {
+      const client = getSupabaseClient();
+      const { data, error } = await client.from('e_office_files').select('*').eq('uuid', uuid).single();
+      if (error || !data) {
+        showToast('Unable to find record for editing.', 'error');
+        return;
+      }
+      record = data;
+    }
 
     isEditMode = true;
     editUuidInput.value = uuid;
@@ -542,9 +557,14 @@
   /* ═════════════════════════════════════════════════════════════════════
    *  DELETE / ARCHIVE & RESTORE (Modal Handlers)
    * ═════════════════════════════════════════════════════════════════════ */
-  function confirmDelete(uuid) {
-    const record = allActiveRecords.find(r => r.uuid === uuid);
-    if (!record) return;
+  async function confirmDelete(uuid) {
+    let record = currentRecords.find(r => r.uuid === uuid);
+    if (!record) {
+      const client = getSupabaseClient();
+      const { data } = await client.from('e_office_files').select('*').eq('uuid', uuid).single();
+      record = data;
+    }
+    const compNum = record?.e_office_computer_number || 'selected file';
 
     modalAction = 'delete';
     modalTarget = uuid;
@@ -555,7 +575,7 @@
       <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
     `;
     modalIcon.style.color = 'var(--clr-danger)';
-    modalMsg.textContent = `Are you sure you want to delete file "${record.e_office_computer_number}"? It will be moved to the Archive List.`;
+    modalMsg.textContent = `Are you sure you want to delete file "${compNum}"? It will be moved to the Archive List.`;
 
     modalConfirmBtn.className = 'btn btn-danger';
     modalConfirmText.textContent = 'Delete';
@@ -563,9 +583,14 @@
     actionModal.classList.add('open');
   }
 
-  function confirmRestore(uuid) {
-    const record = allArchivedRecords.find(r => r.uuid === uuid);
-    if (!record) return;
+  async function confirmRestore(uuid) {
+    let record = currentRecords.find(r => r.uuid === uuid);
+    if (!record) {
+      const client = getSupabaseClient();
+      const { data } = await client.from('e_office_files').select('*').eq('uuid', uuid).single();
+      record = data;
+    }
+    const compNum = record?.e_office_computer_number || 'selected file';
 
     modalAction = 'restore';
     modalTarget = uuid;
@@ -576,7 +601,7 @@
       <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
     `;
     modalIcon.style.color = 'var(--clr-success)';
-    modalMsg.textContent = `Are you sure you want to restore file "${record.e_office_computer_number}" back to the Active List?`;
+    modalMsg.textContent = `Are you sure you want to restore file "${compNum}" back to the Active List?`;
 
     modalConfirmBtn.className = 'btn btn-success';
     modalConfirmText.textContent = 'Restore';
@@ -584,10 +609,20 @@
     actionModal.classList.add('open');
   }
 
-  modalCancelBtn.addEventListener('click', closeActionModal);
-  actionModal.addEventListener('click', (e) => {
-    if (e.target === actionModal) closeActionModal();
-  });
+  function setupModalListeners() {
+    modalCancelBtn.addEventListener('click', closeActionModal);
+    actionModal.addEventListener('click', (e) => {
+      if (e.target === actionModal) closeActionModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && actionModal.classList.contains('open')) {
+        closeActionModal();
+      }
+    });
+
+    modalConfirmBtn.addEventListener('click', handleModalConfirm);
+  }
 
   function closeActionModal() {
     actionModal.classList.remove('open');
@@ -596,8 +631,9 @@
     modalConfirmBtn.disabled = false;
   }
 
-  modalConfirmBtn.addEventListener('click', async () => {
+  async function handleModalConfirm() {
     if (!modalTarget) return;
+
     modalConfirmBtn.classList.add('loading');
     modalConfirmBtn.disabled = true;
 
@@ -622,7 +658,8 @@
           showToast('Failed to delete record: ' + error.message, 'error');
         } else {
           showToast('Record moved to Archive List.', 'success');
-          await loadRecords();
+          if (dataTableInstance) dataTableInstance.ajax.reload(null, false);
+          await updateBadgeCounts();
         }
 
       } else if (modalAction === 'restore') {
@@ -640,7 +677,8 @@
           showToast('Failed to restore record: ' + error.message, 'error');
         } else {
           showToast('Record restored to Active List.', 'success');
-          await loadRecords();
+          if (dataTableInstance) dataTableInstance.ajax.reload(null, false);
+          await updateBadgeCounts();
         }
       }
 
@@ -649,13 +687,12 @@
     }
 
     closeActionModal();
-  });
+  }
 
 
   /* ═════════════════════════════════════════════════════════════════════
    *  HELPERS
    * ═════════════════════════════════════════════════════════════════════ */
-
   function resetForm() {
     form.reset();
     editUuidInput.value = '';
@@ -684,8 +721,9 @@
   }
 
   function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
     const div = document.createElement('div');
-    div.textContent = str;
+    div.textContent = String(str);
     return div.innerHTML;
   }
 

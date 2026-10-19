@@ -11,12 +11,17 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 
+  <!-- DataTables CSS -->
+  <link href="https://cdn.datatables.net/v/dt/dt-3.1.4/datatables.min.css" rel="stylesheet" />
+
   <!-- Styles -->
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="e-office-files.css" />
 
   <!-- Supabase JS SDK (UMD) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <!-- DataTables JS -->
+  <script src="https://cdn.datatables.net/v/dt/dt-3.1.4/datatables.min.js"></script>
 </head>
 <body>
 
@@ -243,72 +248,61 @@
             <span id="table-title-text">Active Records</span>
           </h3>
 
-          <div class="list-tabs" role="tablist" aria-label="Record status filter">
-            <button class="list-tab active" id="tab-active" role="tab" aria-selected="true" data-view="active">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-              </svg>
-              <span>Active List</span>
-              <span class="tab-badge" id="active-badge">0</span>
-            </button>
-            <button class="list-tab" id="tab-archive" role="tab" aria-selected="false" data-view="archive">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="21 8 21 21 3 21 3 8"/>
-                <rect x="1" y="3" width="22" height="5"/>
-                <line x1="10" y1="12" x2="14" y2="12"/>
-              </svg>
-              <span>Archive List</span>
-              <span class="tab-badge" id="archive-badge">0</span>
-            </button>
-          </div>
-        </div>
+          <div class="table-header-controls">
+            <!-- Active List & Archive List Segmented Tabs -->
+            <div class="list-tabs" role="tablist" aria-label="Record status filter">
+              <button class="list-tab active" id="tab-active" role="tab" aria-selected="true" data-view="active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>Active List</span>
+                <span class="tab-badge" id="active-badge">0</span>
+              </button>
+              <button class="list-tab" id="tab-archive" role="tab" aria-selected="false" data-view="archive">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="21 8 21 21 3 21 3 8"/>
+                  <rect x="1" y="3" width="22" height="5"/>
+                  <line x1="10" y1="12" x2="14" y2="12"/>
+                </svg>
+                <span>Archive List</span>
+                <span class="tab-badge" id="archive-badge">0</span>
+              </button>
+            </div>
 
-        <!-- Toolbar -->
-        <div class="table-toolbar">
-          <div class="search-box">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="8"/>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input type="text" id="search-input" placeholder="Search by number or subject…" aria-label="Search records" />
+            <!-- Refresh button -->
+            <button class="btn-icon" id="refresh-btn" title="Refresh data" aria-label="Refresh data">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+            </button>
           </div>
-          <span class="record-count" id="record-count"></span>
-          <button class="btn-icon" id="refresh-btn" title="Refresh data" aria-label="Refresh data">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="23 4 23 10 17 10"/>
-              <polyline points="1 20 1 14 7 14"/>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-            </svg>
-          </button>
         </div>
 
         <!-- Table -->
         <div class="table-wrap">
-          <table class="data-table" id="data-table">
+          <table class="data-table display nowrap" id="data-table" style="width:100%;">
             <thead>
               <tr>
-                <th class="sno-cell">S.No.</th>
+                <th class="sno-cell" style="width:55px;">S.No.</th>
                 <th>Computer Number</th>
                 <th>File Number</th>
                 <th>Subject</th>
                 <th id="col-header-date">Created At</th>
                 <th id="col-header-user">Created By</th>
-                <th>Actions</th>
+                <th style="width:90px;">Actions</th>
               </tr>
             </thead>
             <tbody id="table-body">
-              <!-- Rows injected by JS -->
+              <!-- Rows injected by DataTables -->
             </tbody>
           </table>
         </div>
-
-        <!-- Pagination -->
-        <div class="pagination" id="pagination"></div>
       </section>
 
     </main>
