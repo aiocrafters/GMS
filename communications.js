@@ -48,9 +48,25 @@
     'grievances_portal',                      // 8: Grievances Portal
     'departmental_channels',                  // 9: Departmental Channels
     'non_actionable',                         // 10: Non Actionable
-    'total_representations',                  // 11: Pending (fallback sort)
+    null,                                     // 11: Pending (dynamically calculated)
     'created_at'                              // 12: Actions (fallback sort)
   ];
+
+  /* ── Dynamic PENDING Sorting & Calculation ── */
+  let pendingSortCache = null;
+
+  function clearPendingSortCache() {
+    pendingSortCache = null;
+  }
+
+  function calculatePending(r) {
+    if (!r) return 0;
+    const totalRep = Number(r.total_representations) || 0;
+    const grievPortal = Number(r.grievances_portal) || 0;
+    const deptChannels = Number(r.departmental_channels) || 0;
+    const nonActionable = Number(r.non_actionable) || 0;
+    return totalRep - (grievPortal + deptChannels + nonActionable);
+  }
 
   /* ── Database Table ── */
   const DB_TABLE = 'received_communications';
@@ -572,6 +588,8 @@
       isSubmitting = false;
       closeFormModal();
 
+      clearPendingSortCache();
+
       // If in archive view and user created a record, switch to active view to show it
       if (currentView === 'archive' && !isEditMode) {
         switchView('active');
@@ -651,6 +669,8 @@
 
     // 2. Switch tab
     currentView = newView;
+
+    clearPendingSortCache();
 
     if (newView === 'active') {
       tabActive.classList.add('active');
@@ -735,56 +755,138 @@
       },
       columnDefs: [
         { targets: 0, orderable: false, searchable: false, width: '55px' },
-        { targets: 11, orderable: false }, // Pending
+        { targets: 11, orderable: true, type: 'num', orderSequence: ['asc', 'desc'] }, // Pending numeric sorting
         { targets: 12, orderable: false, searchable: false, width: '170px' } // Actions
       ],
       ajax: async function (data, callback, settings) {
         try {
           const client = getSupabaseClient();
           const isArchive = (currentView === 'archive');
-
-          let query = client
-            .from(DB_TABLE)
-            .select('*', { count: 'exact' })
-            .eq('is_deleted', isArchive);
-
-          // Built-in search
           const q = (data.search && data.search.value) ? data.search.value.trim() : '';
-          if (q) {
-            query = query.or(`communication_number.ilike.%${q}%,e_office_file_number.ilike.%${q}%,e_office_computer_number.ilike.%${q}%,communication_subject.ilike.%${q}%,communication_received_from.ilike.%${q}%,communication_sender_name.ilike.%${q}%`);
-          }
-
-          // Built-in sorting
-          if (data.order && data.order.length > 0) {
-            const ord = data.order[0];
-            const colIdx = ord.column !== undefined ? ord.column : ord.col;
-            const dbCol = COLUMN_DB_MAP[colIdx] || 'created_at';
-            const ascending = (ord.dir === 'asc');
-            query = query.order(dbCol, { ascending });
-            if (dbCol !== 'created_at') {
-               query = query.order('created_at', { ascending: false });
-            }
-          } else {
-            query = query.order('created_at', { ascending: false });
-          }
-
-          // Pagination range
           const start = data.start || 0;
           const length = data.length || 20;
-          query = query.range(start, start + length - 1);
 
-          const { data: records, count, error } = await query;
+          // Determine sorting column & direction
+          let colIdx = -1;
+          let ascending = false;
+          if (data.order && data.order.length > 0) {
+            const ord = data.order[0];
+            colIdx = ord.column !== undefined ? ord.column : ord.col;
+            ascending = (ord.dir === 'asc');
+          }
 
-          if (error) {
-            console.error('Supabase query error:', error);
-            showToast('Error loading communications: ' + error.message, 'error');
-            callback({
-              draw: data.draw,
-              recordsTotal: 0,
-              recordsFiltered: 0,
-              data: []
-            });
-            return;
+          let records = [];
+          let recordsCount = 0;
+
+          if (colIdx === 11) {
+            // Sort by PENDING: dynamically calculated numeric sorting
+            if (
+              pendingSortCache &&
+              pendingSortCache.view === currentView &&
+              pendingSortCache.search === q
+            ) {
+              if (pendingSortCache.ascending !== ascending) {
+                pendingSortCache.records.sort((a, b) => {
+                  const pA = calculatePending(a);
+                  const pB = calculatePending(b);
+                  if (pA !== pB) return ascending ? (pA - pB) : (pB - pA);
+                  const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                  const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                  return dateB - dateA;
+                });
+                pendingSortCache.ascending = ascending;
+              }
+            } else {
+              let countQuery = client
+                .from(DB_TABLE)
+                .select('uuid', { count: 'exact', head: true })
+                .eq('is_deleted', isArchive);
+
+              if (q) {
+                countQuery = countQuery.or(`communication_number.ilike.%${q}%,e_office_file_number.ilike.%${q}%,e_office_computer_number.ilike.%${q}%,communication_subject.ilike.%${q}%,communication_received_from.ilike.%${q}%,communication_sender_name.ilike.%${q}%`);
+              }
+
+              const countRes = await countQuery;
+              if (countRes.error) throw countRes.error;
+
+              const totalFiltered = countRes.count || 0;
+              let allFetched = [];
+
+              if (totalFiltered > 0) {
+                const batchSize = 1000;
+                const batchPromises = [];
+                for (let offset = 0; offset < totalFiltered; offset += batchSize) {
+                  const end = Math.min(offset + batchSize - 1, totalFiltered - 1);
+                  let bQuery = client
+                    .from(DB_TABLE)
+                    .select('*')
+                    .eq('is_deleted', isArchive);
+
+                  if (q) {
+                    bQuery = bQuery.or(`communication_number.ilike.%${q}%,e_office_file_number.ilike.%${q}%,e_office_computer_number.ilike.%${q}%,communication_subject.ilike.%${q}%,communication_received_from.ilike.%${q}%,communication_sender_name.ilike.%${q}%`);
+                  }
+                  batchPromises.push(bQuery.range(offset, end));
+                }
+
+                const batchResponses = await Promise.all(batchPromises);
+                for (const bRes of batchResponses) {
+                  if (bRes.error) throw bRes.error;
+                  if (bRes.data) allFetched.push(...bRes.data);
+                }
+
+                allFetched.sort((a, b) => {
+                  const pA = calculatePending(a);
+                  const pB = calculatePending(b);
+                  if (pA !== pB) return ascending ? (pA - pB) : (pB - pA);
+                  const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                  const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                  return dateB - dateA;
+                });
+              }
+
+              pendingSortCache = {
+                view: currentView,
+                search: q,
+                ascending: ascending,
+                records: allFetched,
+                count: totalFiltered
+              };
+            }
+
+            recordsCount = pendingSortCache.count;
+            records = pendingSortCache.records.slice(start, start + length);
+
+          } else {
+            // Standard server-side column sorting
+            let query = client
+              .from(DB_TABLE)
+              .select('*', { count: 'exact' })
+              .eq('is_deleted', isArchive);
+
+            // Built-in search
+            if (q) {
+              query = query.or(`communication_number.ilike.%${q}%,e_office_file_number.ilike.%${q}%,e_office_computer_number.ilike.%${q}%,communication_subject.ilike.%${q}%,communication_received_from.ilike.%${q}%,communication_sender_name.ilike.%${q}%`);
+            }
+
+            // Built-in sorting
+            if (colIdx >= 0) {
+              const dbCol = COLUMN_DB_MAP[colIdx] || 'created_at';
+              query = query.order(dbCol, { ascending });
+              if (dbCol !== 'created_at') {
+                query = query.order('created_at', { ascending: false });
+              }
+            } else {
+              query = query.order('created_at', { ascending: false });
+            }
+
+            // Pagination range
+            query = query.range(start, start + length - 1);
+
+            const { data: dbRecords, count, error } = await query;
+            if (error) throw error;
+
+            records = dbRecords || [];
+            recordsCount = count || 0;
           }
 
           currentRecords = records || [];
@@ -803,7 +905,7 @@
             const grievPortal = Number(r.grievances_portal) || 0;
             const deptChannels = Number(r.departmental_channels) || 0;
             const nonActionable = Number(r.non_actionable) || 0;
-            const pending = totalRep - (grievPortal + deptChannels + nonActionable);
+            const pending = calculatePending(r);
 
             const totalRepBadge = `<span class="badge badge-primary">${totalRep}</span>`;
             const grievPortalBadge = `<span class="badge badge-accent">${grievPortal}</span>`;
@@ -856,8 +958,8 @@
 
           callback({
             draw: data.draw,
-            recordsTotal: count || 0,
-            recordsFiltered: count || 0,
+            recordsTotal: recordsCount,
+            recordsFiltered: recordsCount,
             data: rows
           });
 
@@ -906,6 +1008,7 @@
 
     // Refresh button
     refreshBtn.addEventListener('click', async () => {
+      clearPendingSortCache();
       refreshBtn.classList.add('spinning');
       if (dataTableInstance) {
         dataTableInstance.ajax.reload(() => {
@@ -1152,6 +1255,7 @@
       segregationCloseX.disabled = false;
       isSegregating = false;
       closeSegregationModal();
+      clearPendingSortCache();
 
       if (dataTableInstance) {
         dataTableInstance.ajax.reload(null, false);
@@ -1307,6 +1411,7 @@
           showToast('Failed to delete communication: ' + error.message, 'error');
         } else {
           showToast('Communication moved to Archive List.', 'success');
+          clearPendingSortCache();
           if (dataTableInstance) {
             dataTableInstance.ajax.reload(null, false);
           }
@@ -1328,6 +1433,7 @@
           showToast('Failed to restore communication: ' + error.message, 'error');
         } else {
           showToast('Communication restored to Active List.', 'success');
+          clearPendingSortCache();
           if (dataTableInstance) {
             dataTableInstance.ajax.reload(null, false);
           }
