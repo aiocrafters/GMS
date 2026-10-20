@@ -51,6 +51,9 @@
     'created_at'                              // 12: Actions (fallback sort)
   ];
 
+  /* ── Database Table ── */
+  const DB_TABLE = 'received_communications';
+
   /* ── DOM refs ── */
   const pageShell            = document.getElementById('page-shell');
   const logoutBtn            = document.getElementById('logout-btn');
@@ -62,7 +65,7 @@
   const formModalTitleText   = document.getElementById('form-modal-title-text');
   const form                 = document.getElementById('comm-form');
   const editUuidInput        = document.getElementById('edit-uuid');
-  const eofficeUuidInput     = document.getElementById('e-office-uuid');
+  const eofficeFilesUuidInput = document.getElementById('e-office-files-uuid') || document.getElementById('e-office-uuid');
   const selectEofficeFile    = document.getElementById('select-eoffice-file');
   const eofficeFileNumInput  = document.getElementById('eoffice-file-number');
   const eofficeCompNumInput  = document.getElementById('eoffice-computer-number');
@@ -77,6 +80,17 @@
   const senderDesigInput     = document.getElementById('communication-sender-designation');
   const subjectInput         = document.getElementById('communication-subject');
   const totalRepInput        = document.getElementById('total-representations');
+
+  // Category counts inputs & live pending display
+  const grievancesPortalInput = document.getElementById('grievances-portal');
+  const deptChannelsInput     = document.getElementById('departmental-channels');
+  const nonActionableInput    = document.getElementById('non-actionable');
+  const eofficePortalInput    = document.getElementById('e-office-portal');
+  const letterInput           = document.getElementById('letter');
+  const omInput               = document.getElementById('om');
+  const returnedToApplicantInput = document.getElementById('returned-to-applicant');
+  const formPendingDisplay    = document.getElementById('form-pending-value');
+
   const submitBtn            = document.getElementById('submit-btn');
   const submitBtnText        = document.getElementById('submit-btn-text');
   const cancelBtn            = document.getElementById('cancel-btn');
@@ -334,11 +348,11 @@
         const file = eofficeFilesMap.get(uuid);
         eofficeFileNumInput.value = file.e_office_file_number || '';
         eofficeCompNumInput.value = file.e_office_computer_number || '';
-        eofficeUuidInput.value = file.uuid;
+        if (eofficeFilesUuidInput) eofficeFilesUuidInput.value = file.uuid;
       } else {
         eofficeFileNumInput.value = '';
         eofficeCompNumInput.value = '';
-        eofficeUuidInput.value = '';
+        if (eofficeFilesUuidInput) eofficeFilesUuidInput.value = '';
       }
     });
 
@@ -368,6 +382,14 @@
       commMonthInput.value = '';
     }
 
+    // Live calculation of pending count in the form
+    [totalRepInput, grievancesPortalInput, deptChannelsInput, nonActionableInput].forEach(inp => {
+      if (inp) {
+        inp.addEventListener('input', updateFormPendingCalculation);
+        inp.addEventListener('change', updateFormPendingCalculation);
+      }
+    });
+
     // Real-time validation clearance
     commNumInput.addEventListener('input', () => {
       commNumInput.classList.remove('invalid');
@@ -384,6 +406,16 @@
 
     // Form Submit
     form.addEventListener('submit', handleFormSubmit);
+  }
+
+  function updateFormPendingCalculation() {
+    if (!formPendingDisplay) return;
+    const total = parseInt(totalRepInput?.value, 10) || 0;
+    const griev = parseInt(grievancesPortalInput?.value, 10) || 0;
+    const dept = parseInt(deptChannelsInput?.value, 10) || 0;
+    const nonAct = parseInt(nonActionableInput?.value, 10) || 0;
+    const pending = total - (griev + dept + nonAct);
+    formPendingDisplay.textContent = pending;
   }
 
 
@@ -447,7 +479,7 @@
     const commMonth = commMonthInput.value || MONTH_NAMES[new Date(commDate).getMonth()];
 
     const payload = {
-      e_office_uuid: eofficeUuid || null,
+      e_office_files_uuid: (eofficeFilesUuidInput?.value || eofficeUuid) || null,
       e_office_file_number: eofficeFileNumInput.value.trim() || null,
       e_office_computer_number: eofficeCompNumInput.value.trim() || null,
       communication_number: commNumber,
@@ -461,6 +493,13 @@
       communication_sender_designation: senderDesigInput.value.trim() || null,
       communication_subject: subject,
       total_representations: parseInt(totalRepInput.value, 10) || 0,
+      grievances_portal: parseInt(grievancesPortalInput?.value, 10) || 0,
+      e_office_portal: parseInt(eofficePortalInput?.value, 10) || 0,
+      letter: parseInt(letterInput?.value, 10) || 0,
+      om: parseInt(omInput?.value, 10) || 0,
+      returned_to_applicant: parseInt(returnedToApplicantInput?.value, 10) || 0,
+      departmental_channels: parseInt(deptChannelsInput?.value, 10) || 0,
+      non_actionable: parseInt(nonActionableInput?.value, 10) || 0,
       updated_at: new Date().toISOString()
     };
 
@@ -468,7 +507,7 @@
       if (isEditMode && editUuid) {
         /* ── UPDATE ── */
         const { error } = await client
-          .from('communications')
+          .from(DB_TABLE)
           .update(payload)
           .eq('uuid', editUuid);
 
@@ -490,7 +529,7 @@
         payload.created_at = new Date().toISOString();
 
         const { error } = await client
-          .from('communications')
+          .from(DB_TABLE)
           .insert(payload);
 
         if (error) {
@@ -526,7 +565,7 @@
   function resetForm() {
     form.reset();
     editUuidInput.value = '';
-    eofficeUuidInput.value = '';
+    if (eofficeFilesUuidInput) eofficeFilesUuidInput.value = '';
     isEditMode = false;
 
     formModalTitleText.textContent = 'New Communication Record';
@@ -537,6 +576,17 @@
     eofficeCompNumInput.value = '';
     commYearInput.value = '';
     commMonthInput.value = '';
+
+    // Clear category fields to 0
+    if (totalRepInput) totalRepInput.value = '0';
+    if (grievancesPortalInput) grievancesPortalInput.value = '0';
+    if (eofficePortalInput) eofficePortalInput.value = '0';
+    if (letterInput) letterInput.value = '0';
+    if (omInput) omInput.value = '0';
+    if (returnedToApplicantInput) returnedToApplicantInput.value = '0';
+    if (deptChannelsInput) deptChannelsInput.value = '0';
+    if (nonActionableInput) nonActionableInput.value = '0';
+    updateFormPendingCalculation();
 
     // Clear validation styling
     [selectEofficeFile, commNumInput, commDateInput, receivedFromSelect, subjectInput].forEach(el => {
@@ -609,8 +659,8 @@
       const client = getSupabaseClient();
 
       const [activeRes, archiveRes] = await Promise.all([
-        client.from('communications').select('uuid', { count: 'exact', head: true }).eq('is_deleted', false),
-        client.from('communications').select('uuid', { count: 'exact', head: true }).eq('is_deleted', true)
+        client.from(DB_TABLE).select('uuid', { count: 'exact', head: true }).eq('is_deleted', false),
+        client.from(DB_TABLE).select('uuid', { count: 'exact', head: true }).eq('is_deleted', true)
       ]);
 
       const activeCount = activeRes.count || 0;
@@ -668,7 +718,7 @@
           const isArchive = (currentView === 'archive');
 
           let query = client
-            .from('communications')
+            .from(DB_TABLE)
             .select('*', { count: 'exact' })
             .eq('is_deleted', isArchive);
 
@@ -835,7 +885,7 @@
     let record = currentRecords.find(r => r.uuid === uuid);
     if (!record) {
       const client = getSupabaseClient();
-      const { data, error } = await client.from('communications').select('*').eq('uuid', uuid).single();
+      const { data, error } = await client.from(DB_TABLE).select('*').eq('uuid', uuid).single();
       if (error || !data) {
         showToast('Unable to find record for editing.', 'error');
         return;
@@ -845,10 +895,13 @@
 
     isEditMode = true;
     editUuidInput.value = uuid;
-    eofficeUuidInput.value = record.e_office_uuid || '';
+    const fileUuid = record.e_office_files_uuid || record.e_office_uuid || '';
+    if (eofficeFilesUuidInput) eofficeFilesUuidInput.value = fileUuid;
 
-    if (record.e_office_uuid) {
-      selectEofficeFile.value = record.e_office_uuid;
+    if (fileUuid) {
+      selectEofficeFile.value = fileUuid;
+    } else {
+      selectEofficeFile.value = '';
     }
 
     eofficeFileNumInput.value = record.e_office_file_number || '';
@@ -863,7 +916,17 @@
     senderNameInput.value = record.communication_sender_name || '';
     senderDesigInput.value = record.communication_sender_designation || '';
     subjectInput.value = record.communication_subject || '';
-    totalRepInput.value = record.total_representations || 0;
+    totalRepInput.value = record.total_representations != null ? record.total_representations : 0;
+
+    if (grievancesPortalInput) grievancesPortalInput.value = record.grievances_portal != null ? record.grievances_portal : 0;
+    if (eofficePortalInput) eofficePortalInput.value = record.e_office_portal != null ? record.e_office_portal : 0;
+    if (letterInput) letterInput.value = record.letter != null ? record.letter : 0;
+    if (omInput) omInput.value = record.om != null ? record.om : 0;
+    if (returnedToApplicantInput) returnedToApplicantInput.value = record.returned_to_applicant != null ? record.returned_to_applicant : 0;
+    if (deptChannelsInput) deptChannelsInput.value = record.departmental_channels != null ? record.departmental_channels : 0;
+    if (nonActionableInput) nonActionableInput.value = record.non_actionable != null ? record.non_actionable : 0;
+
+    updateFormPendingCalculation();
 
     openFormModal('Edit Communication Record', 'Update');
     setTimeout(() => commNumInput.focus(), 120);
@@ -877,7 +940,7 @@
     let record = currentRecords.find(r => r.uuid === uuid);
     if (!record) {
       const client = getSupabaseClient();
-      const { data, error } = await client.from('communications').select('*').eq('uuid', uuid).single();
+      const { data, error } = await client.from(DB_TABLE).select('*').eq('uuid', uuid).single();
       if (error || !data) {
         showToast('Record not found.', 'error');
         return;
@@ -940,7 +1003,7 @@
 
         // Soft delete: update is_deleted, deleted_at, deleted_by (NO .delete())
         const { error } = await client
-          .from('communications')
+          .from(DB_TABLE)
           .update({
             is_deleted: true,
             deleted_at: deletedAt,
@@ -961,7 +1024,7 @@
       } else if (confirmAction === 'restore') {
         // Restore: reset is_deleted back to false, clear deleted_at & deleted_by
         const { error } = await client
-          .from('communications')
+          .from(DB_TABLE)
           .update({
             is_deleted: false,
             deleted_at: null,
