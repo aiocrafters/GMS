@@ -384,6 +384,109 @@
   border-color: rgba(52, 211, 153, 0.35);
 }
 
+/* Segregation Action Button */
+.action-btn.segregation-btn {
+  width: auto;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--clr-primary);
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.3);
+  letter-spacing: 0.02em;
+}
+
+.action-btn.segregation-btn:hover {
+  background: var(--clr-primary);
+  color: #fff;
+  border-color: var(--clr-primary);
+  box-shadow: 0 0 14px rgba(99, 102, 241, 0.4);
+}
+
+.action-btn.segregation-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Segregation Record Context Banner */
+.segregation-record-banner {
+  background: rgba(15, 23, 42, 0.75);
+  border-bottom: 1px solid var(--clr-border);
+  padding: 12px 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  font-size: 0.84rem;
+}
+
+.segregation-record-banner .banner-item-wide {
+  grid-column: span 2;
+}
+
+.segregation-record-banner .banner-label {
+  color: var(--clr-text-muted);
+  font-weight: 500;
+  margin-right: 6px;
+}
+
+.segregation-record-banner .banner-value {
+  color: var(--clr-text);
+  font-weight: 600;
+}
+
+/* Segregation Summary & Metrics Card */
+.segregation-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-sm);
+  padding: 14px 18px;
+  margin-top: 6px;
+}
+
+.summary-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.summary-metric .metric-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--clr-text-muted);
+  font-weight: 700;
+}
+
+.summary-metric .metric-value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--clr-text);
+}
+
+.summary-sep {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--clr-text-muted);
+  opacity: 0.6;
+}
+
+.text-accent {
+  color: var(--clr-accent) !important;
+}
+
+.text-pending {
+  color: #fbbf24 !important;
+}
+
+.summary-metric .metric-value.text-danger {
+  color: var(--clr-danger) !important;
+}
+
 .btn-success {
   background: linear-gradient(135deg, #10b981, #059669);
   color: #fff;

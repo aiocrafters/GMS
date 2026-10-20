@@ -21,6 +21,7 @@
   let currentView = 'active';        // 'active' | 'archive'
   let isEditMode = false;
   let isSubmitting = false;          // prevents closing modal during submit
+  let isSegregating = false;         // prevents closing segregation modal during save
   let confirmTargetUuid = null;
   let confirmAction = 'delete';      // 'delete' | 'restore'
 
@@ -119,6 +120,30 @@
   const confirmActionBtn     = document.getElementById('confirm-action-btn');
   const confirmActionText    = document.getElementById('confirm-action-text');
 
+  // Modal: Segregation popup
+  const segregationModal         = document.getElementById('segregation-modal');
+  const segregationCloseX        = document.getElementById('segregation-modal-close-x');
+  const segregationCancelBtn     = document.getElementById('segregation-cancel-btn');
+  const segregationSaveBtn       = document.getElementById('segregation-save-btn');
+  const segregationSaveBtnText   = document.getElementById('segregation-save-btn-text');
+  const segregationUuidInput     = document.getElementById('segregation-uuid');
+  const segBannerCommNum         = document.getElementById('seg-banner-comm-num');
+  const segBannerFileNum         = document.getElementById('seg-banner-file-num');
+  const segBannerSubject         = document.getElementById('seg-banner-subject');
+  const segTotalRepInput         = document.getElementById('seg-total-representations');
+  const segGrievancesInput       = document.getElementById('seg-grievances-portal');
+  const segEofficeInput          = document.getElementById('seg-e-office-portal');
+  const segLetterInput           = document.getElementById('seg-letter');
+  const segOmInput               = document.getElementById('seg-om');
+  const segReturnedInput         = document.getElementById('seg-returned-to-applicant');
+  const segDeptChannelsInput     = document.getElementById('seg-departmental-channels');
+  const segNonActionableInput    = document.getElementById('seg-non-actionable');
+  const segSumTotal              = document.getElementById('seg-sum-total');
+  const segSumSegregated         = document.getElementById('seg-sum-segregated');
+  const segSumPending            = document.getElementById('seg-sum-pending');
+  const segErrorMsg              = document.getElementById('segregation-error-msg');
+  const segErrorText             = document.getElementById('segregation-error-text');
+
 
   /* ═════════════════════════════════════════════════════════════════════
    *  INIT
@@ -143,6 +168,7 @@
       setupModalListeners();
       setupTabListeners();
       setupTableActionListeners();
+      setupSegregationListeners();
 
       pageShell.style.display = 'flex';
       hideLoading();
@@ -710,7 +736,7 @@
       columnDefs: [
         { targets: 0, orderable: false, searchable: false, width: '55px' },
         { targets: 11, orderable: false }, // Pending
-        { targets: 12, orderable: false, searchable: false, width: '90px' } // Actions
+        { targets: 12, orderable: false, searchable: false, width: '170px' } // Actions
       ],
       ajax: async function (data, callback, settings) {
         try {
@@ -793,6 +819,16 @@
                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                     </svg>
                   </button>
+                  <button class="action-btn segregation-btn" title="Segregation" aria-label="Segregation" data-uuid="${r.uuid}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M16 3h5v5"/>
+                      <path d="M8 3H3v5"/>
+                      <path d="M12 22v-8.3"/>
+                      <path d="M21 3l-7.5 7.5"/>
+                      <path d="M3 3l7.5 7.5"/>
+                    </svg>
+                    <span>Segregation</span>
+                  </button>
                   <button class="action-btn delete-btn" title="Archive / Delete" aria-label="Delete record" data-uuid="${r.uuid}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <polyline points="3 6 5 6 21 6"/>
@@ -843,12 +879,17 @@
   }
 
   function setupTableActionListeners() {
-    // Delegated click listener on #data-table for edit, delete, and restore
+    // Delegated click listener on #data-table for edit, segregation, delete, and restore
     const tableEl = document.getElementById('data-table');
     tableEl.addEventListener('click', (e) => {
       const editBtn = e.target.closest('.edit-btn');
       if (editBtn) {
         startEdit(editBtn.dataset.uuid);
+        return;
+      }
+      const segBtn = e.target.closest('.segregation-btn');
+      if (segBtn) {
+        openSegregationModal(segBtn.dataset.uuid);
         return;
       }
       const deleteBtn = e.target.closest('.delete-btn');
@@ -875,6 +916,257 @@
       }
       await updateBadgeCounts();
     });
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════
+   *  SEGREGATION MODAL & AUTOMATIC CALCULATIONS
+   * ═════════════════════════════════════════════════════════════════════ */
+  function setupSegregationListeners() {
+    const categoryInputs = [
+      segGrievancesInput,
+      segEofficeInput,
+      segLetterInput,
+      segOmInput,
+      segReturnedInput,
+      segNonActionableInput
+    ];
+
+    categoryInputs.forEach(input => {
+      if (!input) return;
+      // Prevent typing invalid characters (negative sign, decimal point, exponents)
+      input.addEventListener('keydown', (e) => {
+        if (['-', '+', 'e', 'E', '.'].includes(e.key)) {
+          e.preventDefault();
+        }
+      });
+
+      // Recalculate and sanitize on every input and change event
+      input.addEventListener('input', () => {
+        sanitizeNonNegativeInt(input);
+        recalculateSegregation();
+      });
+
+      input.addEventListener('change', () => {
+        sanitizeNonNegativeInt(input);
+        recalculateSegregation();
+      });
+    });
+
+    // Close buttons
+    segregationCloseX.addEventListener('click', () => {
+      if (!isSegregating) closeSegregationModal();
+    });
+
+    segregationCancelBtn.addEventListener('click', () => {
+      if (!isSegregating) closeSegregationModal();
+    });
+
+    // Backdrop click
+    segregationModal.addEventListener('click', (e) => {
+      if (e.target === segregationModal && !isSegregating) {
+        closeSegregationModal();
+      }
+    });
+
+    // Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && segregationModal.classList.contains('open') && !isSegregating) {
+        closeSegregationModal();
+      }
+    });
+
+    // Save button
+    segregationSaveBtn.addEventListener('click', handleSaveSegregation);
+  }
+
+  function sanitizeNonNegativeInt(input) {
+    if (!input) return 0;
+    let val = String(input.value || '').trim();
+    if (val === '') {
+      input.value = '';
+      return 0;
+    }
+    val = val.replace(/[^0-9]/g, '');
+    const num = parseInt(val, 10);
+    const result = isNaN(num) ? 0 : Math.max(0, num);
+    input.value = result;
+    return result;
+  }
+
+  function recalculateSegregation() {
+    const totalRep = parseInt(segTotalRepInput.value, 10) || 0;
+
+    const griev = parseInt(segGrievancesInput.value, 10) || 0;
+    const eoffice = parseInt(segEofficeInput.value, 10) || 0;
+    const letter = parseInt(segLetterInput.value, 10) || 0;
+    const om = parseInt(segOmInput.value, 10) || 0;
+    const returned = parseInt(segReturnedInput.value, 10) || 0;
+    const nonAct = parseInt(segNonActionableInput.value, 10) || 0;
+
+    // 7. Departmental Channel = E-Office Portal + Letter + OM + Returned to Applicant
+    const deptChannel = eoffice + letter + om + returned;
+    segDeptChannelsInput.value = deptChannel;
+
+    // Total Segregated = Grievances Portal + E-Office Portal + Letter + OM + Returned to Applicant + Non Actionable
+    const totalSegregated = griev + eoffice + letter + om + returned + nonAct;
+
+    // Pending = Total Representations − Total Segregated
+    const pending = totalRep - totalSegregated;
+
+    segSumTotal.textContent = totalRep;
+    segSumSegregated.textContent = totalSegregated;
+    segSumPending.textContent = pending;
+
+    // Validate Total Segregated does not exceed Total Representations
+    if (totalSegregated > totalRep) {
+      segErrorMsg.classList.add('visible');
+      segErrorText.textContent = `Total segregated representations (${totalSegregated}) cannot exceed Total Representations (${totalRep}). Please adjust values.`;
+      segSumPending.classList.add('text-danger');
+      segSumPending.classList.remove('text-pending');
+      segregationSaveBtn.disabled = true;
+      return false;
+    } else {
+      segErrorMsg.classList.remove('visible');
+      segSumPending.classList.remove('text-danger');
+      segSumPending.classList.add('text-pending');
+      segregationSaveBtn.disabled = false;
+      return true;
+    }
+  }
+
+  async function openSegregationModal(uuid) {
+    if (!uuid) return;
+
+    showLoading();
+    let record = currentRecords.find(r => r.uuid === uuid);
+    if (!record) {
+      try {
+        const client = getSupabaseClient();
+        const { data, error } = await client.from(DB_TABLE).select('*').eq('uuid', uuid).single();
+        if (error || !data) {
+          hideLoading();
+          showToast('Unable to load communication record.', 'error');
+          return;
+        }
+        record = data;
+      } catch (err) {
+        hideLoading();
+        showToast('Network error loading communication record.', 'error');
+        return;
+      }
+    }
+    hideLoading();
+
+    segregationUuidInput.value = record.uuid;
+    segBannerCommNum.textContent = record.communication_number || '—';
+    segBannerFileNum.textContent = record.e_office_file_number || '—';
+    segBannerSubject.textContent = record.communication_subject || '—';
+
+    // Populate values from database record (default to 0 if null/undefined)
+    segTotalRepInput.value = record.total_representations != null ? record.total_representations : 0;
+    segGrievancesInput.value = record.grievances_portal != null ? record.grievances_portal : 0;
+    segEofficeInput.value = record.e_office_portal != null ? record.e_office_portal : 0;
+    segLetterInput.value = record.letter != null ? record.letter : 0;
+    segOmInput.value = record.om != null ? record.om : 0;
+    segReturnedInput.value = record.returned_to_applicant != null ? record.returned_to_applicant : 0;
+    segNonActionableInput.value = record.non_actionable != null ? record.non_actionable : 0;
+
+    recalculateSegregation();
+
+    segregationModal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => segGrievancesInput.focus(), 120);
+  }
+
+  function closeSegregationModal() {
+    segregationModal.classList.remove('open');
+    document.body.style.overflow = '';
+    segregationUuidInput.value = '';
+    segErrorMsg.classList.remove('visible');
+    segregationSaveBtn.disabled = false;
+    segregationSaveBtn.classList.remove('loading');
+    isSegregating = false;
+  }
+
+  async function handleSaveSegregation() {
+    // 1. Sanitize all numeric fields
+    [segGrievancesInput, segEofficeInput, segLetterInput, segOmInput, segReturnedInput, segNonActionableInput].forEach(inp => {
+      sanitizeNonNegativeInt(inp);
+    });
+
+    // 2. Validate calculations
+    const isValid = recalculateSegregation();
+    if (!isValid) {
+      showToast('Validation failed: Total segregated exceeds Total Representations.', 'error');
+      return;
+    }
+
+    const uuid = segregationUuidInput.value;
+    if (!uuid) return;
+
+    isSegregating = true;
+    segregationSaveBtn.disabled = true;
+    segregationSaveBtn.classList.add('loading');
+    segregationCancelBtn.disabled = true;
+    segregationCloseX.disabled = true;
+
+    const grievVal = parseInt(segGrievancesInput.value, 10) || 0;
+    const eofficeVal = parseInt(segEofficeInput.value, 10) || 0;
+    const letterVal = parseInt(segLetterInput.value, 10) || 0;
+    const omVal = parseInt(segOmInput.value, 10) || 0;
+    const returnedVal = parseInt(segReturnedInput.value, 10) || 0;
+    const deptChannelVal = eofficeVal + letterVal + omVal + returnedVal;
+    const nonActionableVal = parseInt(segNonActionableInput.value, 10) || 0;
+
+    try {
+      const client = getSupabaseClient();
+      const { error } = await client
+        .from(DB_TABLE)
+        .update({
+          grievances_portal: grievVal,
+          e_office_portal: eofficeVal,
+          letter: letterVal,
+          om: omVal,
+          returned_to_applicant: returnedVal,
+          departmental_channels: deptChannelVal,
+          non_actionable: nonActionableVal,
+          updated_at: new Date().toISOString()
+        })
+        .eq('uuid', uuid);
+
+      if (error) {
+        showToast('Failed to save segregation: ' + error.message, 'error');
+        segErrorMsg.classList.add('visible');
+        segErrorText.textContent = error.message;
+        segregationSaveBtn.disabled = false;
+        segregationSaveBtn.classList.remove('loading');
+        segregationCancelBtn.disabled = false;
+        segregationCloseX.disabled = false;
+        isSegregating = false;
+        return;
+      }
+
+      showToast('Segregation saved successfully.', 'success');
+      segregationSaveBtn.classList.remove('loading');
+      segregationCancelBtn.disabled = false;
+      segregationCloseX.disabled = false;
+      isSegregating = false;
+      closeSegregationModal();
+
+      if (dataTableInstance) {
+        dataTableInstance.ajax.reload(null, false);
+      }
+      await updateBadgeCounts();
+
+    } catch (err) {
+      console.error('Error saving segregation:', err);
+      showToast('Network error saving segregation.', 'error');
+      segregationSaveBtn.disabled = false;
+      segregationSaveBtn.classList.remove('loading');
+      segregationCancelBtn.disabled = false;
+      segregationCloseX.disabled = false;
+      isSegregating = false;
+    }
   }
 
 
