@@ -182,6 +182,73 @@
 
 
   /* ═════════════════════════════════════════════════════════════════════
+   *  DROPDOWN SORTING HELPERS (Descending: Highest to Lowest)
+   * ═════════════════════════════════════════════════════════════════════ */
+
+  /**
+   * General-purpose descending comparison for numeric, mixed alphanumeric, and text values.
+   * Higher values come first.
+   */
+  function compareDescending(valA, valB) {
+    const strA = valA != null ? String(valA).trim() : '';
+    const strB = valB != null ? String(valB).trim() : '';
+
+    if (!strA && !strB) return 0;
+    if (!strA) return 1;  // empty pushed to end
+    if (!strB) return -1;
+
+    const numA = Number(strA);
+    const numB = Number(strB);
+    const isNumA = !isNaN(numA) && strA !== '';
+    const isNumB = !isNaN(numB) && strB !== '';
+
+    if (isNumA && isNumB) {
+      if (numB !== numA) {
+        return numB - numA; // Highest number first (descending numerical order)
+      }
+    }
+
+    // Natural numeric collation fallback for alphanumeric strings (e.g. "FILE-100" vs "FILE-20", "1234/2024")
+    return strB.localeCompare(strA, undefined, { numeric: true, sensitivity: 'base' });
+  }
+
+  /**
+   * Sort E-Office files descending:
+   * 1. Primary: E-Office Computer Number (highest to lowest, numeric/natural)
+   * 2. Secondary: E-Office File Number (highest to lowest, numeric/natural)
+   */
+  function compareEofficeFilesDescending(a, b) {
+    const compA = a.e_office_computer_number ? String(a.e_office_computer_number).trim() : '';
+    const compB = b.e_office_computer_number ? String(b.e_office_computer_number).trim() : '';
+
+    if (compA && compB) {
+      const cmp = compareDescending(compA, compB);
+      if (cmp !== 0) return cmp;
+      return compareDescending(a.e_office_file_number, b.e_office_file_number);
+    }
+
+    if (compA && !compB) return -1; // File with computer number takes precedence
+    if (!compA && compB) return 1;
+
+    // Both lack computer number -> compare by file number
+    return compareDescending(a.e_office_file_number, b.e_office_file_number);
+  }
+
+  /**
+   * Sort Communications descending:
+   * 1. Primary: Communication Number (highest to lowest, numeric/natural)
+   * 2. Secondary: Communication Date (latest date first)
+   */
+  function compareCommunicationsDescending(a, b) {
+    const cmp = compareDescending(a.communication_number, b.communication_number);
+    if (cmp !== 0) return cmp;
+
+    // Secondary sort: communication date descending
+    return compareDescending(a.communication_date, b.communication_date);
+  }
+
+
+  /* ═════════════════════════════════════════════════════════════════════
    *  DROPDOWN DATA LOADERS
    * ═════════════════════════════════════════════════════════════════════ */
   async function loadEofficeFilesDropdown() {
@@ -190,15 +257,14 @@
       const { data, error } = await client
         .from('e_office_files')
         .select('uuid, e_office_computer_number, e_office_file_number')
-        .eq('is_deleted', false)
-        .order('e_office_computer_number', { ascending: true });
+        .eq('is_deleted', false);
 
       if (error) {
         console.error('Error fetching e_office_files:', error);
         return;
       }
 
-      eOfficeFilesList = data || [];
+      eOfficeFilesList = (data || []).sort(compareEofficeFilesDescending);
       populateEofficeSelect();
 
     } catch (err) {
@@ -207,6 +273,9 @@
   }
 
   function populateEofficeSelect(selectedUuid = '') {
+    // Ensure files are consistently sorted descending (highest to lowest)
+    eOfficeFilesList.sort(compareEofficeFilesDescending);
+
     selectEofficeFile.innerHTML = '<option value="">-- Choose an E-Office File --</option>';
 
     eOfficeFilesList.forEach(file => {
@@ -237,8 +306,7 @@
         .from('received_communications')
         .select('uuid, communication_number, communication_date')
         .eq('e_office_files_uuid', eOfficeUuid)
-        .eq('is_deleted', false)
-        .order('communication_date', { ascending: false });
+        .eq('is_deleted', false);
 
       if (error) {
         console.error('Error loading communications:', error);
@@ -246,7 +314,8 @@
         return;
       }
 
-      currentFileCommsList = data || [];
+      // Sort communications numerically in descending order (highest to lowest)
+      currentFileCommsList = (data || []).sort(compareCommunicationsDescending);
 
       if (currentFileCommsList.length === 0) {
         selectCommNumber.innerHTML = '<option value="">-- No communications found for this file --</option>';
@@ -385,11 +454,12 @@
 
 
 
-  function openCreateModal() {
+  async function openCreateModal() {
     isEditMode = false;
     resetForm();
     formModalTitleText.textContent = 'Add New Representation';
     formSubmitBtnText.textContent = 'Save Representation';
+    await loadEofficeFilesDropdown();
     formModal.classList.add('open');
     document.body.style.overflow = 'hidden';
     setTimeout(() => selectEofficeFile.focus(), 120);
