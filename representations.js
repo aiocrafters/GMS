@@ -254,17 +254,36 @@
   async function loadEofficeFilesDropdown() {
     try {
       const client = getSupabaseClient();
-      const { data, error } = await client
-        .from('e_office_files')
-        .select('uuid, e_office_computer_number, e_office_file_number')
-        .eq('is_deleted', false);
+      const allFiles = [];
+      const CHUNK_SIZE = 1000;
+      let from = 0;
+      let hasMore = true;
 
-      if (error) {
-        console.error('Error fetching e_office_files:', error);
-        return;
+      while (hasMore) {
+        const { data, error } = await client
+          .from('e_office_files')
+          .select('uuid, e_office_computer_number, e_office_file_number')
+          .eq('is_deleted', false)
+          .range(from, from + CHUNK_SIZE - 1);
+
+        if (error) {
+          console.error('Error fetching e_office_files chunk:', error);
+          break;
+        }
+
+        if (data && data.length > 0) {
+          allFiles.push(...data);
+          if (data.length < CHUNK_SIZE) {
+            hasMore = false;
+          } else {
+            from += CHUNK_SIZE;
+          }
+        } else {
+          hasMore = false;
+        }
       }
 
-      eOfficeFilesList = (data || []).sort(compareEofficeFilesDescending);
+      eOfficeFilesList = allFiles.sort(compareEofficeFilesDescending);
       populateEofficeSelect();
 
     } catch (err) {

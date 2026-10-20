@@ -296,18 +296,37 @@
   async function loadEofficeFilesDropdown() {
     try {
       const client = getSupabaseClient();
-      const { data, error } = await client
-        .from('e_office_files')
-        .select('uuid, e_office_file_number, e_office_computer_number, e_office_file_subject')
-        .eq('is_deleted', false)
-        .order('e_office_computer_number', { ascending: false })
-        .limit(3500);
+      const allFiles = [];
+      const CHUNK_SIZE = 1000;
+      let from = 0;
+      let hasMore = true;
 
-      if (error) {
-        console.error('Failed to load E-Office files:', error);
-        selectEofficeFile.innerHTML = '<option value="">-- Error loading files --</option>';
-        return;
+      while (hasMore) {
+        const { data, error } = await client
+          .from('e_office_files')
+          .select('uuid, e_office_file_number, e_office_computer_number, e_office_file_subject')
+          .eq('is_deleted', false)
+          .range(from, from + CHUNK_SIZE - 1);
+
+        if (error) {
+          console.error('Failed to load E-Office files chunk:', error);
+          selectEofficeFile.innerHTML = '<option value="">-- Error loading files --</option>';
+          return;
+        }
+
+        if (data && data.length > 0) {
+          allFiles.push(...data);
+          if (data.length < CHUNK_SIZE) {
+            hasMore = false;
+          } else {
+            from += CHUNK_SIZE;
+          }
+        } else {
+          hasMore = false;
+        }
       }
+
+      const data = allFiles;
 
       // Sort in descending order (highest to lowest) based on e_office_computer_number
       // with numeric-aware collation so numbers like 101, 100, 99 appear in correct numerical order
