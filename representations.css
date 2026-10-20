@@ -640,6 +640,79 @@ table.dataTable tbody tr:hover td {
   padding: 10px 24px;
 }
 
+/* ═════════════════════════════════════════════════════════════════════
+ *  CONFIRMATION MODAL (Soft Delete / Restore)
+ * ═════════════════════════════════════════════════════════════════════ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.modal-backdrop.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal-box {
+  background: var(--clr-bg-card-solid);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  max-width: 440px;
+  width: 100%;
+  box-shadow: var(--shadow-card);
+  transform: scale(0.95);
+  transition: transform 0.25s ease;
+}
+
+.modal-backdrop.open .modal-box {
+  transform: scale(1);
+}
+
+.modal-box h4 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.modal-box h4 svg {
+  width: 22px;
+  height: 22px;
+  color: var(--clr-danger);
+  flex-shrink: 0;
+}
+
+.modal-box p {
+  color: var(--clr-text-muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.modal-actions .btn {
+  width: auto;
+  padding: 10px 20px;
+}
+
 /* ── Form Grid Layout ── */
 .rep-form-grid {
   display: grid;
