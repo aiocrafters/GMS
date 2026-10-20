@@ -64,7 +64,7 @@
 
   // Form Fields
   const editUuidInput        = document.getElementById('edit-uuid');
-  const eOfficeUuidInput     = document.getElementById('e-office-uuid');
+  const eOfficeFilesUuidInput = document.getElementById('e-office-files-uuid') || document.getElementById('e-office-uuid');
   const eOfficeCompNumInput  = document.getElementById('e-office-computer-number');
   const eOfficeFileNumInput  = document.getElementById('e-office-file-number');
   const commUuidInput        = document.getElementById('received-communications-uuid');
@@ -354,7 +354,7 @@
 
       const selectedUuid = selectEofficeFile.value;
       if (!selectedUuid) {
-        eOfficeUuidInput.value = '';
+        eOfficeFilesUuidInput.value = '';
         eOfficeCompNumInput.value = '';
         eOfficeFileNumInput.value = '';
         commUuidInput.value = '';
@@ -369,7 +369,7 @@
 
       const file = eOfficeFilesList.find(f => f.uuid === selectedUuid);
       if (file) {
-        eOfficeUuidInput.value = file.uuid;
+        eOfficeFilesUuidInput.value = file.uuid;
         eOfficeCompNumInput.value = file.e_office_computer_number || '';
         eOfficeFileNumInput.value = file.e_office_file_number || '';
 
@@ -494,8 +494,9 @@
     formSubmitBtnText.textContent = 'Update Representation';
 
     // Populate hidden inputs
+    const fileUuid = record.e_office_files_uuid || record.e_office_uuid || '';
     editUuidInput.value = record.uuid;
-    eOfficeUuidInput.value = record.e_office_uuid;
+    eOfficeFilesUuidInput.value = fileUuid;
     eOfficeCompNumInput.value = record.e_office_computer_number || '';
     eOfficeFileNumInput.value = record.e_office_file_number || '';
     commUuidInput.value = record.received_communications_uuid;
@@ -503,13 +504,13 @@
     commDateInput.value = record.communication_date || '';
 
     // 1. Select E-Office File
-    populateEofficeSelect(record.e_office_uuid);
+    populateEofficeSelect(fileUuid);
     pillCompNo.textContent = record.e_office_computer_number || '—';
     pillFileNo.textContent = record.e_office_file_number || '—';
     eofficeInfoPill.style.display = 'flex';
 
     // 2. Load and Select Communication Number
-    await loadCommunicationsForFile(record.e_office_uuid, record.received_communications_uuid);
+    await loadCommunicationsForFile(fileUuid, record.received_communications_uuid);
 
     // 3. Serial Number
     serialNumberInput.value = record.representation_serial_number != null ? record.representation_serial_number : '';
@@ -537,7 +538,7 @@
   function resetForm() {
     repForm.reset();
     editUuidInput.value = '';
-    eOfficeUuidInput.value = '';
+    eOfficeFilesUuidInput.value = '';
     eOfficeCompNumInput.value = '';
     eOfficeFileNumInput.value = '';
     commUuidInput.value = '';
@@ -671,7 +672,7 @@
     setFormLoading(true);
 
     const payload = {
-      e_office_uuid: eOfficeUuid,
+      e_office_files_uuid: eOfficeUuid,
       e_office_computer_number: eOfficeCompNumInput.value.trim(),
       e_office_file_number: eOfficeFileNumInput.value.trim(),
       received_communications_uuid: commUuid,
