@@ -497,6 +497,15 @@ table.dataTable tbody tr:hover td {
 
 .action-btn.edit-btn {
   color: var(--clr-accent);
+.action-btn.update-btn {
+  color: #38bdf8;
+}
+
+.action-btn.update-btn:hover {
+  background: rgba(56, 189, 248, 0.15);
+  border-color: #38bdf8;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
 }
 
 .action-btn.edit-btn:hover {
@@ -523,6 +532,199 @@ table.dataTable tbody tr:hover td {
   background: rgba(52, 211, 153, 0.12);
   border-color: rgba(52, 211, 153, 0.35);
   color: #fff;
+}
+
+/* ── Workflow Modal & History Styles in Representations Register ── */
+.rep-summary-banner {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.rep-summary-banner .banner-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.rep-summary-banner .banner-badge {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.rep-summary-banner .banner-applicant {
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: var(--clr-text);
+}
+
+.rep-summary-banner .banner-channel {
+  font-size: 0.76rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--clr-text-muted);
+}
+
+.rep-summary-banner .banner-meta {
+  display: flex;
+  gap: 20px;
+  font-size: 0.82rem;
+  color: var(--clr-text-dim);
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.rep-summary-banner .banner-subject {
+  font-size: 0.86rem;
+  color: var(--clr-text-muted);
+  line-height: 1.45;
+}
+
+.workflow-history-section {
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.history-header h4 {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--clr-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.history-header .history-count {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: var(--clr-surface);
+  color: var(--clr-text-dim);
+  font-weight: 600;
+}
+
+.history-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.history-card {
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--clr-surface);
+  border-left: 3px solid var(--clr-primary);
+  border-top: 1px solid var(--clr-border);
+  border-right: 1px solid var(--clr-border);
+  border-bottom: 1px solid var(--clr-border);
+}
+
+.history-card.type-fwd {
+  border-left-color: #818cf8;
+}
+
+.history-card.type-atr {
+  border-left-color: #f59e0b;
+}
+
+.history-card.type-sub {
+  border-left-color: #10b981;
+}
+
+.history-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.history-type-badge {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.history-card.type-fwd .history-type-badge {
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+}
+
+.history-card.type-atr .history-type-badge {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+}
+
+.history-card.type-sub .history-type-badge {
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+}
+
+.history-date {
+  font-size: 0.76rem;
+  color: var(--clr-text-dim);
+}
+
+.history-details {
+  font-size: 0.84rem;
+  color: var(--clr-text);
+  line-height: 1.4;
+}
+
+.history-remarks {
+  font-size: 0.78rem;
+  color: var(--clr-text-dim);
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.history-empty {
+  text-align: center;
+  padding: 20px;
+  font-size: 0.86rem;
+  color: var(--clr-text-dim);
+}
+
+.workflow-specific-section {
+  padding: 18px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px dashed rgba(99, 102, 241, 0.3);
+  margin-top: 6px;
+}
+
+.workflow-specific-section .section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--clr-primary-hover);
+  margin-bottom: 14px;
 }
 
 /* ═════════════════════════════════════════════════════════════════════

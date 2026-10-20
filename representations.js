@@ -110,6 +110,62 @@
   const confirmActionBtn     = document.getElementById('confirm-action-btn');
   const confirmActionText    = document.getElementById('confirm-action-text');
 
+  // Workflow Modal DOM Elements
+  const wfModal              = document.getElementById('workflow-modal');
+  const wfModalCloseX        = document.getElementById('wf-modal-close-x');
+  const wfCancelBtn          = document.getElementById('wf-cancel-btn');
+  const wfSubmitBtn          = document.getElementById('wf-submit-btn');
+  const wfSubmitBtnText      = document.getElementById('wf-submit-btn-text');
+  const wfActionForm         = document.getElementById('wf-action-form');
+
+  const wfPillSerial         = document.getElementById('wf-pill-serial');
+  const wfPillApplicant      = document.getElementById('wf-pill-applicant');
+  const wfPillChannel        = document.getElementById('wf-pill-channel');
+  const wfPillCompFile       = document.getElementById('wf-pill-comp-file');
+  const wfPillComm           = document.getElementById('wf-pill-comm');
+  const wfPillSubject        = document.getElementById('wf-pill-subject');
+
+  const wfHistoryCount       = document.getElementById('wf-history-count');
+  const wfHistoryList        = document.getElementById('wf-history-list');
+
+  const wfRepUuid            = document.getElementById('wf-rep-uuid');
+  const wfEofficeUuid        = document.getElementById('wf-eoffice-uuid');
+  const wfEofficeComp        = document.getElementById('wf-eoffice-comp');
+  const wfEofficeFile        = document.getElementById('wf-eoffice-file');
+  const wfCommUuid           = document.getElementById('wf-comm-uuid');
+  const wfCommNum            = document.getElementById('wf-comm-num');
+  const wfCommDate           = document.getElementById('wf-comm-date');
+  const wfSerialNum          = document.getElementById('wf-serial-num');
+  const wfApplicant          = document.getElementById('wf-applicant');
+  const wfSubject            = document.getElementById('wf-subject');
+  const wfChannel            = document.getElementById('wf-channel');
+
+  const wfTypeSelect         = document.getElementById('wf-type-select');
+  const wfTypeError          = document.getElementById('wf-type-error');
+  const wfChannelIdInput     = document.getElementById('wf-channel-id-input');
+
+  const wfSectionForward     = document.getElementById('wf-section-forward');
+  const wfFwdDept            = document.getElementById('wf-fwd-dept');
+  const wfFwdDate            = document.getElementById('wf-fwd-date');
+  const wfFwdDispatch        = document.getElementById('wf-fwd-dispatch');
+  const wfFwdRemarks         = document.getElementById('wf-fwd-remarks');
+
+  const wfSectionAtr         = document.getElementById('wf-section-atr');
+  const wfAtrStatusSelect    = document.getElementById('wf-atr-status-select');
+  const wfAtrDate            = document.getElementById('wf-atr-date');
+  const wfAtrRef             = document.getElementById('wf-atr-ref');
+  const wfAtrRemarks         = document.getElementById('wf-atr-remarks');
+
+  const wfSectionSubmitted   = document.getElementById('wf-section-submitted');
+  const wfSubDate            = document.getElementById('wf-sub-date');
+  const wfSubTo              = document.getElementById('wf-sub-to');
+  const wfSubDispatch        = document.getElementById('wf-sub-dispatch');
+  const wfSubRemarks         = document.getElementById('wf-sub-remarks');
+
+  const wfGeneralRemarks     = document.getElementById('wf-general-remarks');
+
+  let isWfSubmitting         = false;
+
 
   /* ═════════════════════════════════════════════════════════════════════
    *  INIT & AUTH
@@ -132,6 +188,7 @@
       populateNav();
       setupFormListeners();
       setupModalListeners();
+      setupWorkflowListeners();
       setupTabListeners();
       setupTableActionListeners();
 
@@ -953,6 +1010,15 @@
             // Actions
             const actionsHtml = (currentView === 'active')
               ? `<div class="action-btns">
+                  <button class="action-btn update-btn" title="Update Workflow Action" aria-label="Update workflow action" data-uuid="${r.uuid}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="16 3 21 3 21 8"/>
+                      <line x1="4" y1="20" x2="21" y2="3"/>
+                      <polyline points="21 16 21 21 16 21"/>
+                      <line x1="15" y1="15" x2="21" y2="21"/>
+                      <line x1="4" y1="4" x2="9" y2="9"/>
+                    </svg>
+                  </button>
                   <button class="action-btn edit-btn" title="Edit" aria-label="Edit representation" data-uuid="${r.uuid}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -1029,6 +1095,11 @@
   function setupTableActionListeners() {
     const tableEl = document.getElementById('data-table');
     tableEl.addEventListener('click', (e) => {
+      const updateBtn = e.target.closest('.update-btn');
+      if (updateBtn) {
+        openWorkflowModal(updateBtn.dataset.uuid);
+        return;
+      }
       const editBtn = e.target.closest('.edit-btn');
       if (editBtn) {
         openEditModal(editBtn.dataset.uuid);
@@ -1106,6 +1177,7 @@
       if (e.key === 'Escape') {
         if (confirmModal.classList.contains('open')) closeConfirmModal();
         else if (formModal.classList.contains('open') && !isSubmitting) closeFormModal();
+        else if (wfModal && wfModal.classList.contains('open') && !isWfSubmitting) closeWorkflowModal();
       }
     });
 
@@ -1175,6 +1247,359 @@
 
       closeConfirmModal();
     });
+  }
+
+
+  /* ═════════════════════════════════════════════════════════════════════
+   *  WORKFLOW MODAL & ACTIONS
+   * ═════════════════════════════════════════════════════════════════════ */
+  function setupWorkflowListeners() {
+    if (wfModalCloseX) wfModalCloseX.addEventListener('click', closeWorkflowModal);
+    if (wfCancelBtn) wfCancelBtn.addEventListener('click', closeWorkflowModal);
+
+    if (wfModal) {
+      wfModal.addEventListener('click', (e) => {
+        if (e.target === wfModal && !isWfSubmitting) closeWorkflowModal();
+      });
+    }
+
+    if (wfTypeSelect) {
+      wfTypeSelect.addEventListener('change', () => {
+        clearFieldError(wfTypeSelect, wfTypeError);
+        updateWorkflowTypeView(wfTypeSelect.value);
+      });
+    }
+
+    if (wfSubmitBtn) {
+      wfSubmitBtn.addEventListener('click', handleWorkflowSubmit);
+    }
+  }
+
+  function updateWorkflowTypeView(type) {
+    if (wfSectionForward) wfSectionForward.style.display = (type === 'Forward to Concerned') ? 'block' : 'none';
+    if (wfSectionAtr) wfSectionAtr.style.display = (type === 'ATR Status') ? 'block' : 'none';
+    if (wfSectionSubmitted) wfSectionSubmitted.style.display = (type === 'ATR Submitted to Original Source') ? 'block' : 'none';
+  }
+
+  function closeWorkflowModal() {
+    if (wfModal) wfModal.classList.remove('open');
+    document.body.style.overflow = '';
+    resetWorkflowForm();
+  }
+
+  function resetWorkflowForm() {
+    if (wfActionForm) wfActionForm.reset();
+    if (wfRepUuid) wfRepUuid.value = '';
+    if (wfEofficeUuid) wfEofficeUuid.value = '';
+    if (wfEofficeComp) wfEofficeComp.value = '';
+    if (wfEofficeFile) wfEofficeFile.value = '';
+    if (wfCommUuid) wfCommUuid.value = '';
+    if (wfCommNum) wfCommNum.value = '';
+    if (wfCommDate) wfCommDate.value = '';
+    if (wfSerialNum) wfSerialNum.value = '';
+    if (wfApplicant) wfApplicant.value = '';
+    if (wfSubject) wfSubject.value = '';
+    if (wfChannel) wfChannel.value = '';
+    if (wfChannelIdInput) wfChannelIdInput.value = '';
+
+    updateWorkflowTypeView('');
+    clearFieldError(wfTypeSelect, wfTypeError);
+
+    if (wfHistoryCount) wfHistoryCount.textContent = '0 recorded';
+    if (wfHistoryList) wfHistoryList.innerHTML = '<div class="history-empty">Loading history…</div>';
+
+    setWfSubmitting(false);
+  }
+
+  function resetWorkflowActionFields() {
+    if (wfTypeSelect) wfTypeSelect.value = '';
+    updateWorkflowTypeView('');
+    clearFieldError(wfTypeSelect, wfTypeError);
+
+    if (wfFwdDept) wfFwdDept.value = '';
+    if (wfFwdDate) wfFwdDate.value = '';
+    if (wfFwdDispatch) wfFwdDispatch.value = '';
+    if (wfFwdRemarks) wfFwdRemarks.value = '';
+
+    if (wfAtrStatusSelect) wfAtrStatusSelect.value = '';
+    if (wfAtrDate) wfAtrDate.value = '';
+    if (wfAtrRef) wfAtrRef.value = '';
+    if (wfAtrRemarks) wfAtrRemarks.value = '';
+
+    if (wfSubDate) wfSubDate.value = '';
+    if (wfSubTo) wfSubTo.value = '';
+    if (wfSubDispatch) wfSubDispatch.value = '';
+    if (wfSubRemarks) wfSubRemarks.value = '';
+
+    if (wfGeneralRemarks) wfGeneralRemarks.value = '';
+  }
+
+  function setWfSubmitting(on) {
+    isWfSubmitting = on;
+    if (wfSubmitBtn) {
+      wfSubmitBtn.disabled = on;
+      wfSubmitBtn.classList.toggle('loading', on);
+    }
+    if (wfCancelBtn) wfCancelBtn.disabled = on;
+    if (wfModalCloseX) wfModalCloseX.disabled = on;
+  }
+
+  async function openWorkflowModal(repUuid) {
+    if (!repUuid) return;
+    showLoading();
+
+    let record = currentRecords.find(r => r.uuid === repUuid);
+    if (!record) {
+      try {
+        const client = getSupabaseClient();
+        const { data, error } = await client.from(DB_TABLE).select('*').eq('uuid', repUuid).single();
+        if (error || !data) {
+          hideLoading();
+          showToast('Unable to load representation details.', 'error');
+          return;
+        }
+        record = data;
+      } catch (err) {
+        hideLoading();
+        showToast('Network error loading representation.', 'error');
+        return;
+      }
+    }
+    hideLoading();
+
+    resetWorkflowForm();
+
+    // Fill Summary Banner
+    if (wfPillSerial) wfPillSerial.textContent = `S. No. #${record.representation_serial_number || '?'}`;
+    if (wfPillApplicant) wfPillApplicant.textContent = record.applicant_name || 'Anonymous';
+    if (wfPillChannel) wfPillChannel.textContent = record.processing_channel || 'Channel';
+    if (wfPillCompFile) wfPillCompFile.textContent = `${record.e_office_computer_number || '—'} / ${record.e_office_file_number || '—'}`;
+    if (wfPillComm) wfPillComm.textContent = `${record.communication_number || '—'} (${record.communication_date ? formatDateOnly(record.communication_date) : '—'})`;
+    if (wfPillSubject) wfPillSubject.textContent = record.representation_subject || '—';
+
+    // Populate hidden inputs
+    const fileUuid = record.e_office_files_uuid || record.e_office_uuid || '';
+    if (wfRepUuid) wfRepUuid.value = record.uuid;
+    if (wfEofficeUuid) wfEofficeUuid.value = fileUuid;
+    if (wfEofficeComp) wfEofficeComp.value = record.e_office_computer_number || '';
+    if (wfEofficeFile) wfEofficeFile.value = record.e_office_file_number || '';
+    if (wfCommUuid) wfCommUuid.value = record.received_communications_uuid || '';
+    if (wfCommNum) wfCommNum.value = record.communication_number || '';
+    if (wfCommDate) wfCommDate.value = record.communication_date || '';
+    if (wfSerialNum) wfSerialNum.value = record.representation_serial_number != null ? record.representation_serial_number : '';
+    if (wfApplicant) wfApplicant.value = record.applicant_name || '';
+    if (wfSubject) wfSubject.value = record.representation_subject || '';
+    if (wfChannel) wfChannel.value = record.processing_channel || '';
+
+    // Open modal immediately
+    wfModal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    // Load workflow history asynchronously
+    await loadWorkflowHistory(record.uuid, record.received_communications_uuid, record.representation_serial_number);
+  }
+
+  async function loadWorkflowHistory(repUuid, commUuid, serialNum) {
+    if (!wfHistoryList) return;
+    wfHistoryList.innerHTML = '<div class="history-empty">Loading workflow history…</div>';
+
+    try {
+      const client = getSupabaseClient();
+      let query = client
+        .from('representation_workflow_records')
+        .select('*')
+        .eq('is_deleted', false);
+
+      if (repUuid && commUuid && serialNum != null) {
+        query = query.or(`registered_representations_uuid.eq.${repUuid},and(received_communications_uuid.eq.${commUuid},representation_serial_number.eq.${serialNum})`);
+      } else if (repUuid) {
+        query = query.eq('registered_representations_uuid', repUuid);
+      } else if (commUuid && serialNum != null) {
+        query = query.eq('received_communications_uuid', commUuid).eq('representation_serial_number', serialNum);
+      }
+
+      const { data: records, error } = await query.order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching workflow history:', error);
+        wfHistoryList.innerHTML = '<div class="history-empty">Unable to load workflow history.</div>';
+        if (wfHistoryCount) wfHistoryCount.textContent = '0 recorded';
+        return;
+      }
+
+      const list = records || [];
+      if (wfHistoryCount) wfHistoryCount.textContent = `${list.length} recorded`;
+
+      if (list.length === 0) {
+        wfHistoryList.innerHTML = '<div class="history-empty">No workflow actions recorded yet for this representation. Use the form below to record an action.</div>';
+        return;
+      }
+
+      // Pre-fill Processing Channel ID Number from the latest entry if present
+      const latestWithId = list.find(r => r.processing_channel_id_number);
+      if (latestWithId && wfChannelIdInput && !wfChannelIdInput.value) {
+        wfChannelIdInput.value = latestWithId.processing_channel_id_number;
+      }
+
+      // Render cards
+      wfHistoryList.innerHTML = list.map(item => {
+        const type = item.workflow_type || 'Workflow Action';
+        let badgeClass = 'badge-primary';
+        if (type === 'Forward to Concerned') badgeClass = 'badge-forward';
+        else if (type === 'ATR Status') badgeClass = 'badge-atr-status';
+        else if (type === 'ATR Submitted to Original Source') badgeClass = 'badge-atr-submitted';
+
+        const createdDate = item.created_at ? formatDate(item.created_at) : '—';
+
+        let detailsHtml = '';
+        if (type === 'Forward to Concerned') {
+          detailsHtml = `
+            <div class="history-detail-row">
+              <strong>Dept / Authority:</strong> <span>${escapeHtml(item.forwarded_to_department || '—')}</span>
+            </div>
+            <div class="history-detail-row">
+              <strong>Forwarding Date:</strong> <span>${item.forwarding_date ? formatDateOnly(item.forwarding_date) : '—'}</span>
+            </div>
+            <div class="history-detail-row">
+              <strong>Dispatch / Ref No:</strong> <span>${escapeHtml(item.forwarding_dispatch_number || '—')}</span>
+            </div>
+            ${item.forwarding_remarks ? `<div class="history-detail-row" style="grid-column: 1 / -1;"><strong>Remarks:</strong> <span>${escapeHtml(item.forwarding_remarks)}</span></div>` : ''}
+          `;
+        } else if (type === 'ATR Status') {
+          let atrBadgeClass = 'badge-warning';
+          if (item.atr_status === 'Received') atrBadgeClass = 'badge-success';
+          else if (item.atr_status === 'Under Consideration') atrBadgeClass = 'badge-info';
+
+          detailsHtml = `
+            <div class="history-detail-row">
+              <strong>ATR Status:</strong> <span class="badge ${atrBadgeClass}">${escapeHtml(item.atr_status || 'Pending')}</span>
+            </div>
+            <div class="history-detail-row">
+              <strong>Receipt Date:</strong> <span>${item.atr_receipt_date ? formatDateOnly(item.atr_receipt_date) : '—'}</span>
+            </div>
+            <div class="history-detail-row">
+              <strong>ATR Ref / Letter:</strong> <span>${escapeHtml(item.atr_reference_number || '—')}</span>
+            </div>
+            ${item.atr_remarks ? `<div class="history-detail-row" style="grid-column: 1 / -1;"><strong>ATR Remarks:</strong> <span>${escapeHtml(item.atr_remarks)}</span></div>` : ''}
+          `;
+        } else if (type === 'ATR Submitted to Original Source') {
+          detailsHtml = `
+            <div class="history-detail-row">
+              <strong>Submitted Date:</strong> <span>${item.atr_submission_date ? formatDateOnly(item.atr_submission_date) : '—'}</span>
+            </div>
+            <div class="history-detail-row">
+              <strong>Destination / Source:</strong> <span>${escapeHtml(item.atr_submitted_to || '—')}</span>
+            </div>
+            <div class="history-detail-row">
+              <strong>Dispatch / Ref No:</strong> <span>${escapeHtml(item.atr_dispatch_number || '—')}</span>
+            </div>
+            ${item.atr_submission_remarks ? `<div class="history-detail-row" style="grid-column: 1 / -1;"><strong>Submission Remarks:</strong> <span>${escapeHtml(item.atr_submission_remarks)}</span></div>` : ''}
+          `;
+        }
+
+        const channelIdRow = item.processing_channel_id_number ? `
+          <div class="history-detail-row">
+            <strong>Channel ID No:</strong> <span style="font-family:monospace;font-weight:600;color:var(--clr-accent);">${escapeHtml(item.processing_channel_id_number)}</span>
+          </div>` : '';
+
+        const remarksRow = item.remarks ? `
+          <div class="history-detail-row" style="grid-column: 1 / -1;">
+            <strong>General Notes:</strong> <span>${escapeHtml(item.remarks)}</span>
+          </div>` : '';
+
+        return `
+          <div class="history-card">
+            <div class="history-card-header">
+              <span class="badge ${badgeClass}" style="font-weight:700;">${escapeHtml(type)}</span>
+              <span class="history-date">${createdDate}</span>
+            </div>
+            <div class="history-card-body">
+              ${detailsHtml}
+              ${channelIdRow}
+              ${remarksRow}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+    } catch (err) {
+      console.error('Workflow history load error:', err);
+      wfHistoryList.innerHTML = '<div class="history-empty">Network error loading workflow history.</div>';
+    }
+  }
+
+  async function handleWorkflowSubmit(e) {
+    if (e) e.preventDefault();
+    if (isWfSubmitting) return;
+
+    const wfType = wfTypeSelect ? wfTypeSelect.value : '';
+    if (!wfType) {
+      showFieldError(wfTypeSelect, wfTypeError);
+      return;
+    }
+    clearFieldError(wfTypeSelect, wfTypeError);
+
+    setWfSubmitting(true);
+
+    try {
+      const client = getSupabaseClient();
+      const userUuid = currentUser?.id || currentProfile?.id || null;
+
+      const payload = {
+        registered_representations_uuid: wfRepUuid.value || null,
+        e_office_files_uuid: wfEofficeUuid.value,
+        e_office_computer_number: wfEofficeComp.value || null,
+        e_office_file_number: wfEofficeFile.value || null,
+        received_communications_uuid: wfCommUuid.value,
+        communication_number: wfCommNum.value || null,
+        communication_date: wfCommDate.value || null,
+        representation_serial_number: parseInt(wfSerialNum.value, 10),
+        applicant_name: wfApplicant.value,
+        representation_subject: wfSubject.value,
+        processing_channel: wfChannel.value,
+        processing_channel_id_number: wfChannelIdInput.value.trim() || null,
+        workflow_type: wfType,
+        remarks: wfGeneralRemarks.value.trim() || null,
+        created_by: userUuid,
+        is_deleted: false
+      };
+
+      if (wfType === 'Forward to Concerned') {
+        payload.forwarded_to_department = wfFwdDept.value.trim() || null;
+        payload.forwarding_date = wfFwdDate.value || null;
+        payload.forwarding_dispatch_number = wfFwdDispatch.value.trim() || null;
+        payload.forwarding_remarks = wfFwdRemarks.value.trim() || null;
+      } else if (wfType === 'ATR Status') {
+        payload.atr_status = wfAtrStatusSelect.value || null;
+        payload.atr_receipt_date = wfAtrDate.value || null;
+        payload.atr_reference_number = wfAtrRef.value.trim() || null;
+        payload.atr_remarks = wfAtrRemarks.value.trim() || null;
+      } else if (wfType === 'ATR Submitted to Original Source') {
+        payload.atr_submission_date = wfSubDate.value || null;
+        payload.atr_submitted_to = wfSubTo.value.trim() || null;
+        payload.atr_dispatch_number = wfSubDispatch.value.trim() || null;
+        payload.atr_submission_remarks = wfSubRemarks.value.trim() || null;
+      }
+
+      // Save to public.representation_workflow_records (does NOT overwrite registered_representations)
+      const { error } = await client
+        .from('representation_workflow_records')
+        .insert(payload);
+
+      if (error) {
+        showToast('Error saving workflow record: ' + error.message, 'error');
+      } else {
+        showToast('Workflow record added successfully!', 'success');
+        resetWorkflowActionFields();
+        await loadWorkflowHistory(wfRepUuid.value, wfCommUuid.value, parseInt(wfSerialNum.value, 10));
+      }
+
+    } catch (err) {
+      console.error('Workflow submit error:', err);
+      showToast('Network error: ' + (err.message || 'Unknown error'), 'error');
+    } finally {
+      setWfSubmitting(false);
+    }
   }
 
 
