@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="GMS — Representations Register. Create, search, sort, and manage registered representation records." />
+  <title>GMS — Representations Register</title>
+
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- DataTables CSS -->
+  <link href="https://cdn.datatables.net/v/dt/dt-3.1.4/datatables.min.css" rel="stylesheet" />
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="representations.css" />
+
+  <!-- Supabase JS SDK (UMD) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <!-- DataTables JS -->
+  <script src="https://cdn.datatables.net/v/dt/dt-3.1.4/datatables.min.js"></script>
+</head>
+<body>
+
+  <!-- Animated background -->
+  <div class="bg-gradient" aria-hidden="true"></div>
+
+  <!-- Loading overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- ── 1. Action Confirmation Modal (Soft Delete / Restore) ── -->
+  <div class="modal-backdrop" id="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+    <div class="modal-box">
+      <h4 id="confirm-modal-title">
+        <svg id="confirm-modal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <span id="confirm-title-text">Confirm Action</span>
+      </h4>
+      <p id="confirm-modal-message">Are you sure you want to proceed with this action?</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="confirm-cancel-btn">Cancel</button>
+        <button class="btn btn-danger" id="confirm-action-btn">
+          <span class="btn-text" id="confirm-action-text">Confirm</span>
+          <span class="btn-spinner"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2. Add / Edit Representation Form POPUP MODAL ── -->
+  <div class="form-modal-backdrop" id="form-modal" role="dialog" aria-modal="true" aria-labelledby="form-modal-title">
+    <div class="form-modal-box">
+      
+      <!-- Modal Header -->
+      <div class="form-modal-header">
+        <h3 id="form-modal-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="12" y1="18" x2="12" y2="12"/>
+            <line x1="9" y1="15" x2="15" y2="15"/>
+          </svg>
+          <span id="form-modal-title-text">Add New Representation</span>
+        </h3>
+        <button class="modal-close-btn" id="modal-close-x" aria-label="Close modal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Modal Body (Scrollable form) -->
+      <div class="form-modal-body">
+        <form id="rep-form" novalidate autocomplete="off">
+          <input type="hidden" id="edit-uuid" value="" />
+          <input type="hidden" id="e-office-uuid" value="" />
+          <input type="hidden" id="e-office-computer-number" value="" />
+          <input type="hidden" id="e-office-file-number" value="" />
+          <input type="hidden" id="received-communications-uuid" value="" />
+          <input type="hidden" id="communication-number" value="" />
+          <input type="hidden" id="communication-date" value="" />
+
+          <div class="rep-form-grid">
+
+            <!-- 1. Select E-Office File -->
+            <div class="form-group col-12">
+              <label for="select-eoffice-file">
+                1. Select E-Office File <span style="color:var(--clr-danger);">*</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <select id="select-eoffice-file" required aria-describedby="eoffice-file-error">
+                  <option value="">-- Choose an E-Office File --</option>
+                </select>
+              </div>
+              <div id="eoffice-info-pill" class="eoffice-info-pill" style="display:none;">
+                <div class="pill-item">
+                  <span class="pill-label">Comp No:</span>
+                  <span class="pill-val" id="pill-comp-no">—</span>
+                </div>
+                <div class="pill-item">
+                  <span class="pill-label">File No:</span>
+                  <span class="pill-val" id="pill-file-no">—</span>
+                </div>
+              </div>
+              <p id="eoffice-file-error" class="field-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>Please select an E-Office file</span>
+              </p>
+            </div>
+
+            <!-- 2. Select Communication Number -->
+            <div class="form-group col-12">
+              <label for="select-communication-number">
+                2. Select Communication Number <span style="color:var(--clr-danger);">*</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                <select id="select-communication-number" required disabled aria-describedby="comm-error">
+                  <option value="">-- Select an E-Office File first --</option>
+                </select>
+              </div>
+              <p id="comm-error" class="field-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>Please select a communication</span>
+              </p>
+            </div>
+
+            <!-- 3. Representation Serial Number -->
+            <div class="form-group col-6">
+              <label for="representation-serial-number">
+                3. Representation Serial Number <span style="color:var(--clr-danger);">*</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="4" y1="9" x2="20" y2="9"/>
+                  <line x1="4" y1="15" x2="20" y2="15"/>
+                  <line x1="10" y1="3" x2="8" y2="21"/>
+                  <line x1="16" y1="3" x2="14" y2="21"/>
+                </svg>
+                <input type="number" id="representation-serial-number" min="1" step="1" required
+                       placeholder="e.g. 1" aria-describedby="serial-error" />
+              </div>
+              <p class="field-hint">Must be a unique positive whole number per communication</p>
+              <p id="serial-error" class="field-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span id="serial-error-text">Please enter a valid serial number (e.g. 1, 2, 3)</span>
+              </p>
+            </div>
+
+            <!-- 6. Processing Channel (placed in row next to Serial Number for clean balance) -->
+            <div class="form-group col-6">
+              <label for="processing-channel">
+                6. Processing Channel <span style="color:var(--clr-danger);">*</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                  <polyline points="2 17 12 22 22 17"/>
+                  <polyline points="2 12 12 17 22 12"/>
+                </svg>
+                <select id="processing-channel" required aria-describedby="channel-error">
+                  <option value="">-- Choose Channel --</option>
+                  <option value="Grievances Portal">Grievances Portal</option>
+                  <option value="E-Office Portal">E-Office Portal</option>
+                  <option value="Letter">Letter</option>
+                  <option value="OM">OM</option>
+                  <option value="Returned to Applicant">Returned to Applicant</option>
+                  <option value="Non Actionable">Non Actionable</option>
+                </select>
+              </div>
+              <p id="channel-error" class="field-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>Please select a processing channel</span>
+              </p>
+            </div>
+
+            <!-- 4. Applicant Name -->
+            <div class="form-group col-12">
+              <label for="applicant-name">
+                4. Applicant Name <span style="color:var(--clr-danger);">*</span>
+              </label>
+              <div class="input-wrapper">
+                <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <input type="text" id="applicant-name" required placeholder="Full name of the applicant"
+                       aria-describedby="applicant-error" />
+              </div>
+              <p id="applicant-error" class="field-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>Please enter the applicant name</span>
+              </p>
+            </div>
+
+            <!-- 5. Representation Subject -->
+            <div class="form-group col-12">
+              <label for="representation-subject">
+                5. Representation Subject <span style="color:var(--clr-danger);">*</span>
+              </label>
+              <div class="input-wrapper">
+                <textarea id="representation-subject" rows="3" required
+                          placeholder="Brief subject or summary of the representation"
+                          aria-describedby="subject-error"></textarea>
+              </div>
+              <p id="subject-error" class="field-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <span>Please enter the representation subject</span>
+              </p>
+            </div>
+
+          </div>
+        </form>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="form-modal-footer">
+        <button type="button" id="form-cancel-btn" class="btn btn-ghost">Cancel</button>
+        <button type="button" id="form-submit-btn" class="btn btn-primary">
+          <span class="btn-text" id="form-submit-btn-text">Save Representation</span>
+          <span class="btn-spinner"></span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── 3. Main Page Shell ── -->
+  <div class="dashboard-wrapper" id="page-shell" style="display:none;">
+
+    <!-- ── Top Navigation ── -->
+    <nav class="top-nav" role="navigation" aria-label="Main navigation">
+      <div class="nav-brand">
+        <a href="dashboard.html" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit;">
+          <div class="nav-logo" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </div>
+          <span>GMS</span>
+        </a>
+      </div>
+
+      <div class="nav-links">
+        <a href="dashboard.html" class="nav-link">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          <span>Dashboard</span>
+        </a>
+        <a href="e-office-files.html" class="nav-link">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          <span>E-Office Files</span>
+        </a>
+        <a href="communications.html" class="nav-link">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>Communications</span>
+        </a>
+        <a href="representations.html" class="nav-link active">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <span>Representations</span>
+        </a>
+      </div>
+
+      <div class="nav-actions">
+        <div class="nav-user">
+          <div class="nav-avatar" id="nav-avatar" aria-hidden="true">?</div>
+          <div class="nav-user-info">
+            <span class="nav-user-name" id="nav-user-name">—</span>
+            <span class="nav-user-role" id="nav-user-role">—</span>
+          </div>
+        </div>
+        <button class="btn btn-danger-ghost" id="logout-btn" aria-label="Sign out">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          <span>Logout</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- ── Main Content: Representations Register Data Table ── -->
+    <main class="dashboard-content" style="max-width:1440px;">
+
+      <!-- Page Header with prominent "Add New Representation" button -->
+      <div class="page-header">
+        <h2>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          Representations Register
+        </h2>
+        
+        <div class="page-header-actions">
+          <button class="btn btn-primary btn-new-record" id="btn-open-modal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            <span>+ Add New Representation</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- MAIN SECTION — Representations Data Table Card -->
+      <section class="table-card" aria-label="Representations data table">
+        
+        <!-- Table Card Header with Active List & Archive List Tabs -->
+        <div class="table-card-header">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"/>
+              <rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/>
+              <rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            <span id="table-title-text">Active Representations</span>
+          </h3>
+
+          <div class="table-header-controls">
+            <!-- Active List & Archive List Segmented Tabs -->
+            <div class="list-tabs" role="tablist" aria-label="Record status filter">
+              <button class="list-tab active" id="tab-active" role="tab" aria-selected="true" data-view="active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+                <span>Active List</span>
+                <span class="tab-badge" id="active-badge">0</span>
+              </button>
+              <button class="list-tab" id="tab-archive" role="tab" aria-selected="false" data-view="archive">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="21 8 21 21 3 21 3 8"/>
+                  <rect x="1" y="3" width="22" height="5"/>
+                  <line x1="10" y1="12" x2="14" y2="12"/>
+                </svg>
+                <span>Archive List</span>
+                <span class="tab-badge" id="archive-badge">0</span>
+              </button>
+            </div>
+
+            <!-- Refresh button -->
+            <button class="btn-icon" id="refresh-btn" title="Refresh data" aria-label="Refresh data">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Representations Table -->
+        <div class="table-wrap">
+          <table class="data-table display nowrap" id="data-table" style="width:100%;">
+            <thead>
+              <tr>
+                <th style="min-width:55px;">S. No.</th>
+                <th>E-Office Computer Number</th>
+                <th>E-Office File Number</th>
+                <th>Communication Number</th>
+                <th>Communication Date</th>
+                <th>Representation Serial Number</th>
+                <th>Applicant Name</th>
+                <th>Representation Subject</th>
+                <th>Processing Channel</th>
+                <th id="col-header-date">Created At</th>
+                <th style="min-width:120px;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="table-body">
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- App scripts -->
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script src="ui.js"></script>
+  <script src="representations.js"></script>
+</body>
+</html>
